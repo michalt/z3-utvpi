@@ -14,6 +14,7 @@ std::ostream& operator<<(std::ostream& out, const Sign& s) {
 }
 
 typedef unsigned int VarId;
+
 typedef std::pair<Sign, unsigned int> SignedVarId;
 
 inline Sign negate(Sign s) {
@@ -22,22 +23,12 @@ inline Sign negate(Sign s) {
   return Neg;
 }
 
-
-// namespace std { 
-    // template<>
-    // struct hash<Sign> {
-        // std::size_t operator()(Sign const &s) {
-            // return static_cast<unsigned int>(s);
-        // }
-    // };
-// }
-
-namespace std { 
-    template<>
+namespace std {
+  template<>
     struct hash<SignedVarId> {
-        std::size_t operator()(SignedVarId const &var) const {
-            return var.first + var.second;
-        }
+      std::size_t operator()(SignedVarId const &var) const {
+        return static_cast<size_t>(var.first) + static_cast<size_t>(var.second);
+      }
     };
 }
 
