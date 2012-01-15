@@ -27,9 +27,10 @@ class UtvpiGraph {
     void AddInequality(Sign a, VarId x, T c);
     void AddInequality(Sign a, VarId x, Sign b, VarId y, T c);
 
-    bool CheckSat();
+    // Should be defined by the classes that inherit from this one.
+    // virtual bool CheckSat() = 0;
 
-  protected:
+  public:
     /* Forward declaration for nested class. */
     class Rollback;
 
@@ -68,7 +69,6 @@ class UtvpiGraph {
 
     void GoBack();
 
-    Graph GetGraph() { return graph_; }
     /*
      * Members
      */

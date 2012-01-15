@@ -1,12 +1,13 @@
 CC=g++
 CXXFLAGS=-std=c++0x -Wall -Weffc++
-LIBS=-lz3 -fopenmp
+LIBS=-lgmpxx -lgmp
+# LIBS=-lz3 -fopenmp -lgmpxx -lgmp
 Z3_INCLUDE=/home/m/software/z3/include/
 Z3_LIB=/home/m/software/z3/lib/
 
 all: test
 
-test: common.h utvpi_graph.h utvpi_graph-inl.h test.cc
+test: *.h test.cc
 	$(CC) $(CXXFLAGS) -I$(Z3_INCLUDE) -L$(Z3_LIB) $(LIBS) -o $@ $@.cc
 
 test-clang: common.h utvpi_graph.h utvpi_graph-inl.h test.cc
