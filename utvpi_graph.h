@@ -12,12 +12,13 @@
 
 /*
  * Graph with all the inequalities. The template parameter T is used for
- * defining the domain: either integers or reals.
+ * defining the domain.
  */
 template <typename T>
 class UtvpiGraph {
   public:
-    UtvpiGraph() : graph_(), vertex_map_(), logs_() {
+    UtvpiGraph() : graph_(), vertex_map_(), logs_(),
+                   special_vertex_(boost::add_vertex(graph_)) {
       logs_.push_front(new std::list<Rollback *>());
     }
 
@@ -26,13 +27,9 @@ class UtvpiGraph {
     void AddInequality(Sign a, VarId x, T c);
     void AddInequality(Sign a, VarId x, Sign b, VarId y, T c);
 
-    // Is this actually needed?
-    // void RemoveInequality(Sign a, VarId x);
-    // void RemoveInequality(Sign a, VarId x, Sign b, VarId y);
-
     bool CheckSat();
 
-  private:
+  protected:
     /* Forward declaration for nested class. */
     class Rollback;
 
@@ -79,6 +76,7 @@ class UtvpiGraph {
     Graph graph_;
     VertexMap vertex_map_;
     Logs logs_;
+    Vertex special_vertex_;
 
     /*
      * Nested Rollback

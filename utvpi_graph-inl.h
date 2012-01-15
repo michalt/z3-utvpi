@@ -11,6 +11,12 @@ void UtvpiGraph<T>::Print() {
   for (tie(iter, end) = boost::edges(graph_); iter != end; ++iter) {
     src = boost::source(*iter, graph_);
     trg = boost::target(*iter, graph_);
+
+    /* Suppress printing the special vertex. It's highly confusing since
+     * its corresponding SignedVarId is initialized to 0.. */
+    if (src == special_vertex_)
+      continue;
+
     SignedVarId var_src = graph_[src];
     SignedVarId var_trg = graph_[trg];
     std::cout << var_src.first
@@ -38,6 +44,10 @@ UtvpiGraph<T>::LookupAddVertex(Sign sign, VarId var_x) {
   if (iter == vertex_map_.end()) {
     x = boost::add_vertex(graph_);
     vertex_map_[s_var] = x;
+
+    /* Every vertex must have an edge from the special_vertex_ with weight 0. */
+    Edge e = boost::add_edge(special_vertex_, x, graph_).first;
+    graph_[e] = 0;
   }
   else {
     x = iter->second;
@@ -157,80 +167,46 @@ void UtvpiGraph<T>::AddInequality(Sign a, VarId var_x, T c) {
   UpdateAddEdge(x_neg, 2 * c, x);
 }
 
-/* Remove the edge added by the AddInequality(a, x, b, y, c). */
-// template <typename T>
-// void UtvpiGraph<T>::RemoveInequality(Sign a, VarId var_x, Sign b, VarId var_y) {
-  // Vertex x = LookupAddVertex(a, var_x);
-  // Vertex y = LookupAddVertex(b, var_y);
-
-  // Vertex x_neg = LookupAddVertex(negate(a), var_x);
-  // Vertex y_neg = LookupAddVertex(negate(b), var_y);
-
-  // boost::remove_edge(y_neg, x, graph_);
-  // boost::remove_edge(x_neg, y, graph_);
-// }
-
-// [> Remove the edge added by the AddInequality(a, x, c). <]
-// template <typename T>
-// void UtvpiGraph<T>::RemoveInequality(Sign a, VarId var_x) {
-  // Vertex x = LookupAddVertex(a, var_x);
-  // Vertex x_neg = LookupAddVertex(negate(a), var_x);
-
-  // boost::remove_edge(x_neg, x, graph_);
-// }
-
-/*
- * FIXME: this new vertex and edges should be maintained in the graph at all
- * times... insead of adding and then removing them!!
- */
 template <typename T>
 bool UtvpiGraph<T>::CheckSat() {
-  Vertex special = boost::add_vertex(graph_);
-  VertexIter iter, end;
-  for (boost::tie(iter, end) = boost::vertices(graph_); iter != end; ++iter) {
-    Edge e = boost::add_edge(special, *iter, graph_).first;
-    graph_[e] = 0;
-  }
 
   std::size_t size = boost::num_vertices(graph_);
 
   /* Create distance map. */
-  boost::vector_property_map<T> distance(size);
-  boost::vector_property_map<Vertex> parent(size);
-  // std::vector<T> distance(size);
-  // std::vector<Vertex> parent(size);
+  std::vector<T> distance(size);
+  std::vector<Vertex> parent(size);
 
+  /* Detect cycle with Bellman-Ford algorithm. Also this is why we need the
+   * special_vertex_. */
   bool no_neg_cycle = boost::bellman_ford_shortest_paths
-    (graph_, size, boost::root_vertex(special).
-                     weight_map(boost::get(boost::edge_bundle, graph_)).
-                     distance_map(&distance[0]).
-                     predecessor_map(&parent[0]));
+    (graph_, size, boost::root_vertex(special_vertex_).
+                          weight_map(boost::get(boost::edge_bundle, graph_)).
+                          distance_map(&distance[0]).
+                          predecessor_map(&parent[0]));
 
   if (!no_neg_cycle) {
     std::cout << "Found negative cycle without tightening!" << std::endl;
     return false;
   }
 
-  for (boost::tie(iter, end) = boost::vertices(graph_); iter != end; ++iter) {
-    std::cout << "Vertex: " << graph_[*iter]
-              << ", its parent: " << parent[*iter]
-              << ", its distance: " << distance[*iter]
+  VertexIter v_iter, v_end;
+  for (boost::tie(v_iter, v_end) = boost::vertices(graph_);
+      v_iter != v_end;
+      ++v_iter) {
+    std::cout << "Vertex: " << graph_[*v_iter]
+              << ", its parent: " << parent[*v_iter]
+              << ", its distance: " << distance[*v_iter]
               << std::endl;
   }
 
   Graph tmp_graph(size);
-  boost::vector_property_map<Vertex> to_tmp(size);
-  boost::vector_property_map<bool> to_tmp_assigned(size);
 
-  /* FIXME: is this actually necessary? */
-  for (auto i = to_tmp_assigned.storage_begin();
-       i != to_tmp_assigned.storage_end();
-       ++i) {
-    *i = false;
-  }
-  // std::vector_property_map<bool> to_tmp_assigned(size, false);
-  Vertex tmp_special = boost::add_vertex(tmp_graph);
-  to_tmp[special] = tmp_special;
+  /* Vertex in graph_ -> Vertex in tmp_graph */
+  std::vector<Vertex> to_tmp(size);
+
+  /* Vertex in graph_ -> bool */
+  std::vector<bool> in_tmp(size, false);
+
   /*
    * Now we need to create the induced graph by taking those edges from the
    * original one that can possible be the source of a negative cycle that
@@ -243,8 +219,8 @@ bool UtvpiGraph<T>::CheckSat() {
    * But this lowers the bound and tuhs can reveal a negative cycle!
    */
   EdgeIter e_iter, e_end;
-  Vertex src, trg, tmp_src, tmp_trg;
   Edge tmp_edge;
+  Vertex src, trg, tmp_src, tmp_trg;
   for (tie(e_iter, e_end) = boost::edges(graph_); e_iter != e_end; ++e_iter) {
 
     src = boost::source(*e_iter, graph_);
@@ -252,33 +228,24 @@ bool UtvpiGraph<T>::CheckSat() {
 
     /* We're only looking for edges that have tight bound, that is the
      * difference between distance is exactly the bound. */
-    // FIXME: what about the special thingy..?
-    if (src == special || distance[trg] - distance[src] != graph_[*e_iter])
+    /* FIXME: what about the special_vertex_ vertex..? It should be safe to ignore it.. */
+    if (src == special_vertex_ || distance[trg] - distance[src] != graph_[*e_iter])
       continue;
 
-    // auto tmp_src_iter = to_tmp.find(src);
-    // auto tmp_trg_iter = to_tmp.find(trg);
-
-    if (!to_tmp_assigned[src]) {
+    if (!in_tmp[src]) {
       tmp_src = boost::add_vertex(tmp_graph);
       tmp_graph[tmp_src] = graph_[src];
       to_tmp[src] = tmp_src;
-      to_tmp_assigned[src] = true;
-
-      tmp_edge = boost::add_edge(tmp_special, tmp_src, tmp_graph).first;
-      tmp_graph[tmp_edge] = 0;
+      in_tmp[src] = true;
     } else {
       tmp_src = to_tmp[src];
     }
 
-    if (!to_tmp_assigned[trg]) {
+    if (!in_tmp[trg]) {
       tmp_trg = boost::add_vertex(tmp_graph);
       tmp_graph[tmp_trg] = graph_[trg];
       to_tmp[trg] = tmp_trg;
-      to_tmp_assigned[trg] = true;
-
-      tmp_edge = boost::add_edge(tmp_special, tmp_trg, tmp_graph).first;
-      tmp_graph[tmp_edge] = 0;
+      in_tmp[trg] = true;
     } else {
       tmp_trg = to_tmp[trg];
     }
@@ -289,22 +256,33 @@ bool UtvpiGraph<T>::CheckSat() {
   }
 
   size_t tmp_size = boost::num_vertices(tmp_graph);
+
   boost::vector_property_map<T> tmp_distance(tmp_size);
   boost::vector_property_map<Vertex> tmp_parent(tmp_size);
 
   std::vector<int> component(tmp_size), discover_time(tmp_size);
   std::vector<boost::default_color_type> color(tmp_size);
   std::vector<Vertex> root(tmp_size);
-  unsigned int num = strong_components(tmp_graph, &component[0],
-                              boost::root_map(&root[0]).
-                                color_map(&color[0]).
-                                discover_time_map(&discover_time[0]));
 
-  if (num == tmp_size)
+  unsigned int num = strong_components
+    (tmp_graph, &component[0], boost::root_map(&root[0]).
+                                      color_map(&color[0]).
+                                      discover_time_map(&discover_time[0]));
+
+  if (num == tmp_size) {
+    /* No two vertices are in the same component. */
     return true;
+  }
 
+  /*
+   * We go through all the variables and check if they're corresponding vertices
+   * (if any) in the induced graph are in the same strongly connected component.
+   * If they are and additionally their distance in the original graph is odd,
+   * then it means that we can tighten the bound by substracting 1. But they're
+   * already in a cycle with weight 0, so we have a negative cycle!
+   */
   SignedVarId s_varid, neg_s_varid;
-  Vertex vertex, neg_vertex, new_vertex, new_neg_vertex;
+  Vertex vertex, neg_vertex, tmp_vertex, tmp_neg_vertex;
   for (auto var_iter = vertex_map_.begin();
       var_iter != vertex_map_.end();
       ++var_iter) {
@@ -312,19 +290,13 @@ bool UtvpiGraph<T>::CheckSat() {
     boost::tie(s_varid, vertex) = *var_iter;
     neg_vertex = vertex_map_[negate(s_varid)];
 
-    if (!to_tmp_assigned[vertex] || !to_tmp_assigned[neg_vertex])
+    if (!in_tmp[vertex] || !in_tmp[neg_vertex])
       continue;
 
-    new_vertex = to_tmp[vertex];
-    new_neg_vertex = to_tmp[neg_vertex];
+    tmp_vertex = to_tmp[vertex];
+    tmp_neg_vertex = to_tmp[neg_vertex];
 
-    /*
-     * If they are in the same strongly connected component in the induced
-     * graph and they're distance in the original graph is odd, then it means
-     * that we can tighten the bound by substracting 1. But they're already in a
-     * cycle with weight 0, so we have a negative cycle!
-     */
-    if (component[new_vertex] == component[new_neg_vertex]
+    if (component[tmp_vertex] == component[tmp_neg_vertex]
         && (distance[vertex] - distance[neg_vertex]) % 2 != 0) {
       std::cout << "Found negative cycle by tightening!" << std::endl;
       return false;
