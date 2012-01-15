@@ -71,6 +71,7 @@ class UtvpiGraph {
 
     void GoBack();
 
+    Graph GetGraph() { return graph_; }
     /*
      * Members
      */

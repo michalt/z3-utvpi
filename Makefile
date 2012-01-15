@@ -9,6 +9,10 @@ all: test
 test: common.h utvpi_graph.h utvpi_graph-inl.h test.cc
 	$(CC) $(CXXFLAGS) -I$(Z3_INCLUDE) -L$(Z3_LIB) $(LIBS) -o $@ $@.cc
 
+test-clang: common.h utvpi_graph.h utvpi_graph-inl.h test.cc
+	clang++ $(CXXFLAGS) -I$(Z3_INCLUDE) -c -o $@.o test.cc
+	g++ $@.o -L$(Z3_LIB) $(LIBS) -o $@
+
 # utvpi: inequality_graph.o utvpi.o
 # $(CC) $(CXXFLAGS) -I$(Z3_INCLUDE) -L$(Z3_LIB) $(LIBS) -o $@ $+
 
