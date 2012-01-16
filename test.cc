@@ -3,17 +3,17 @@
 #include <unordered_map>
 
 // FIXME: remove
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/bellman_ford_shortest_paths.hpp>
+// #include <boost/graph/adjacency_list.hpp>
+// #include <boost/graph/bellman_ford_shortest_paths.hpp>
 
 #include <boost/graph/graph_traits.hpp>
-#include <boost/graph/adjacency_list.hpp>
+// #include <boost/graph/adjacency_list.hpp>
 
 #include <limits>
 
 #include <gmpxx.h>
 
-// #include "z3.h"
+#include "z3.h"
 #include "utvpi_graph_z.h"
 #include "utvpi_graph_q.h"
 
@@ -72,7 +72,7 @@ public:
    }
 
    static Type max() {
-     return static_cast<Type>(1000000);
+     return static_cast<Type>(0);
    }
 
    static Type epsilon() {
@@ -95,6 +95,30 @@ public:
      return static_cast<Type>(1);
    }
 };
+}
+
+/*
+ * Template specialization to work around a bug in BGL that defines closed_plus
+ * in the same way no matter if std::numeric_limits::has_infinity is true or
+ * false. This causes BGL to assume that mpz_class to have infinity value equal
+ * to 0, which obviously results in wrong results for some algorithms.
+ */
+namespace boost {
+  template <>
+  struct closed_plus<mpz_class> {
+    mpz_class operator()(const mpz_class& a, const mpz_class& b) const {
+      return a + b;
+    }
+  };
+}
+
+namespace boost {
+  template <>
+  struct closed_plus<mpq_class> {
+    mpq_class operator()(const mpq_class& a, const mpq_class& b) const {
+      return a + b;
+    }
+  };
 }
 
 
@@ -185,7 +209,7 @@ int main(int argc, char *argv[]) {
 
   // UtvpiGraphZ<int> graph;
   // UtvpiGraphZ<Foo> graph;
-  UtvpiGraphZ<mpz_class> graph;
+  UtvpiGraphQ<mpq_class> graph;
   // UtvpiGraphQ<double> graph;
   graph.AddInequality(Pos, 2, Pos, 1, -5);
   graph.AddInequality(Pos, 4, Neg, 1, 4);

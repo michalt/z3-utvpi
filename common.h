@@ -36,11 +36,11 @@ std::ostream& operator<<(std::ostream& out, const SignedVarId& pair) {
 
 namespace std {
   template<>
-    struct hash<SignedVarId> {
-      std::size_t operator()(SignedVarId const &var) const {
-        return  var.second << var.first;
-      }
-    };
+  struct hash<SignedVarId> {
+    std::size_t operator()(SignedVarId const &var) const {
+      return  var.second << var.first;
+    }
+  };
 }
 
 #endif /* COMMON_H */
