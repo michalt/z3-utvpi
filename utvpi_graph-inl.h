@@ -37,6 +37,7 @@ void UtvpiGraph<T>::Print() {
 template <typename T>
 typename UtvpiGraph<T>::Vertex
 UtvpiGraph<T>::LookupAddVertex(Sign sign, VarId var_x) {
+  std::cout << "LookupAddVertex " << sign << " " << var_x << std::endl;
   SignedVarId s_var = SignedVarId(var_x, sign);
   typename VertexMap::const_iterator iter = vertex_map_.find(s_var);
 
@@ -44,6 +45,7 @@ UtvpiGraph<T>::LookupAddVertex(Sign sign, VarId var_x) {
   if (iter == vertex_map_.end()) {
     x = boost::add_vertex(graph_);
     vertex_map_[s_var] = x;
+    std::cout << "Added " << x << std::endl;
 
     /* Every vertex must have an edge from the special_vertex_ with weight 0. */
     Edge e = boost::add_edge(special_vertex_, x, graph_).first;
@@ -51,6 +53,7 @@ UtvpiGraph<T>::LookupAddVertex(Sign sign, VarId var_x) {
   }
   else {
     x = iter->second;
+    std::cout << "Found " << x << std::endl;
   }
 
   /* Record the actual variable with sign. */
@@ -63,12 +66,13 @@ template <typename T>
 typename UtvpiGraph<T>::Edge
 UtvpiGraph<T>::UpdateAddEdge(Vertex src, T weight, Vertex trg) {
 
-  std::cout << "UpdateAddEdge: trying search" << std::endl;
+  std::cout << "UpdateAddEdge: trying search for " << src << " -> " << trg << std::endl;
 
   OutEdgeIter iter, end;
   for (boost::tie(iter, end) = boost::out_edges(src, graph_);
        iter != end; ++iter) {
     if (boost::target(*iter, graph_) == trg) {
+      std::cout << "Found it!" << std::endl;
       /* Found the edge! Update the weight if necessary. */
       if (weight < graph_[*iter]) {
         graph_[*iter] = weight;
@@ -134,7 +138,7 @@ void UtvpiGraph<T>::RemoveEdge(Vertex src, Vertex trg) {
 template <typename T>
 void UtvpiGraph<T>::AddInequality(Sign a, VarId var_x, Sign b, VarId var_y, T c) {
 
-  std::cout << "AddInequality: start" << std::endl;
+  std::cout << "UtvpiGraph: AddInequality: " << a << var_x << " " << b << var_y << std::endl;
 
   Vertex x = LookupAddVertex(a, var_x);
   Vertex y = LookupAddVertex(b, var_y);
@@ -145,7 +149,9 @@ void UtvpiGraph<T>::AddInequality(Sign a, VarId var_x, Sign b, VarId var_y, T c)
   std::cout << "AddInequality: after vertices" << std::endl;
 
   UpdateAddEdge(y_neg, c, x);
+  // std::cout << "adding " << y_neg << " " << x << std::endl;
   UpdateAddEdge(x_neg, c, y);
+  // std::cout << "adding " << x_neg << " " << y << std::endl;
 
   std::cout << "AddInequality: returning" << std::endl;
 }
@@ -195,12 +201,13 @@ template <typename T>
 void UtvpiGraph<T>::Pop() {
   std::cout << "UtvpiGraph: Pop" << std::endl;
   std::list<Rollback *> *list = logs_.front();
-  logs_.pop_front();
 
   for (auto &r : *list) {
     r->Execute(*this);
     delete r;
   }
+
+  logs_.pop_front();
 }
 
 template <typename T>

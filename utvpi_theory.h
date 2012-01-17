@@ -70,6 +70,29 @@ struct UtvpiData {
 
 
 template <template <typename > class Utvpi, typename T>
+void NewEquality(Z3_theory theory, Z3_ast ast1, Z3_ast ast2) {
+  Z3_context context = Z3_theory_get_context(theory);
+  std::cout << "Z3: NewEquality: "
+            << Z3_ast_to_string(context, ast1)
+            << " == "
+            << Z3_ast_to_string(context, ast2)
+            << std::endl;
+
+  UtvpiData<Utvpi, T> *data =
+    static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
+
+  // FIXME: check if both are variables!!
+
+  // FIXME: check if we need to handle the equivalence classes
+
+  VarId x = Z3_get_ast_id(context, ast1);
+  VarId y = Z3_get_ast_id(context, ast2);
+
+  data->graph.AddInequality(Pos, x, Neg, y, 0);
+  data->graph.AddInequality(Pos, y, Neg, x, 0);
+}
+
+template <template <typename > class Utvpi, typename T>
 void Push(Z3_theory theory) {
   std::cout << "Z3: Push" << std::endl;
   UtvpiData<Utvpi, T> *data =
@@ -107,9 +130,8 @@ Z3_bool FinalCheck(Z3_theory theory) {
   std::cout << "Z3: Final check" << std::endl;
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
-  if (data->graph.Satisfiable())
-    return Z3_TRUE;
-  return Z3_FALSE;
+  data->graph.Print();
+  return data->graph.Satisfiable();
 }
 
 Sign ArgToSign(Z3_ast &minus, Z3_ast &plus, Z3_ast &ast) {
@@ -190,10 +212,16 @@ void NewAssignment(Z3_theory theory, Z3_ast ast, Z3_bool value) {
   Z3_ast arg3 = Z3_get_app_arg (context, app_ast, 3);
   Z3_ast arg4 = Z3_get_app_arg (context, app_ast, 4);
 
+  std::cout << "id 0 = " << Z3_get_ast_id(context, arg0) << std::endl;
+  std::cout << "id 1 = " << Z3_get_ast_id(context, arg1) << std::endl;
+  std::cout << "id 2 = " << Z3_get_ast_id(context, arg2) << std::endl;
+  std::cout << "id 3 = " << Z3_get_ast_id(context, arg3) << std::endl;
+  std::cout << "id 4 = " << Z3_get_ast_id(context, arg4) << std::endl;
+
   Sign a = ArgToSign(data->minus, data->plus, arg0);
   Sign b = ArgToSign(data->minus, data->plus, arg2);
-  VarId x = Z3_get_ast_id(context, arg2);
-  VarId y = Z3_get_ast_id(context, arg4);
+  VarId x = Z3_get_ast_id(context, arg1);
+  VarId y = Z3_get_ast_id(context, arg3);
 
   // std::cout << "Argument: " << Z3_ast_to_string(context, arg0) << std::endl;
   // std::cout << "Argument: " << Z3_ast_to_string(context, arg1) << std::endl;
@@ -237,12 +265,12 @@ Z3_theory MkTheory(Z3_context ctx) {
   Z3_set_push_callback(theory, Push<Utvpi, T>);
   Z3_set_pop_callback(theory, Pop<Utvpi, T>);
   Z3_set_final_check_callback(theory, FinalCheck<Utvpi, T>);
+  Z3_set_new_eq_callback(theory, NewEquality<Utvpi, T>);
+  Z3_set_reset_callback(theory, Reset<Utvpi, T>);
+  Z3_set_restart_callback(theory, Restart<Utvpi, T>);
 
   // probably needed later on:
   // Z3_set_init_search_callback(theory, InitSearch<T>);
-  // Z3_set_new_eq_callback(theory, Th_new_eq);
-  // Z3_set_reset_callback(theory, Th_reset);
-  // Z3_set_restart_callback(theory, Th_restart);
   // Z3_set_new_diseq_callback(theory, Th_new_diseq);
   //
   // probably not needed:
