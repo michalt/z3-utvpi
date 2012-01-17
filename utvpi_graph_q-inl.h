@@ -6,7 +6,7 @@
  * everywhere and define the typedefs again.. Annoying.
  */
 template <typename T>
-bool UtvpiGraphQ<T>::CheckSat() {
+bool UtvpiGraphQ<T>::Satisfiable() {
   typedef typename UtvpiGraph<T>::Graph Graph;
   typedef typename UtvpiGraph<T>::Vertex Vertex;
   typedef typename UtvpiGraph<T>::VertexIter VertexIter;

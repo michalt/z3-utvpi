@@ -6,7 +6,7 @@
 template <typename T>
 class UtvpiGraphZ : public UtvpiGraph<T> {
   public:
-    bool CheckSat();
+    bool Satisfiable();
 };
 
 #include "utvpi_graph_z-inl.h"

@@ -71,14 +71,15 @@ struct UtvpiData {
 
 template <template <typename > class Utvpi, typename T>
 void Push(Z3_theory theory) {
-  std::cout << "-> Push" << std::endl;
+  std::cout << "Z3: Push" << std::endl;
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
+  data->graph.Push();
 }
 
 template <template <typename > class Utvpi, typename T>
 void Pop(Z3_theory theory) {
-  std::cout << "-> Pop" << std::endl;
+  std::cout << "Z3: Pop" << std::endl;
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
   data->graph.Pop();
@@ -86,7 +87,7 @@ void Pop(Z3_theory theory) {
 
 template <template <typename > class Utvpi, typename T>
 void Reset(Z3_theory theory) {
-  std::cout << "-> Reset" << std::endl;
+  std::cout << "Z3: Reset" << std::endl;
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
   data->graph.Reset();
@@ -94,7 +95,7 @@ void Reset(Z3_theory theory) {
 
 template <template <typename > class Utvpi, typename T>
 void Restart(Z3_theory theory) {
-  std::cout << "-> Restart" << std::endl;
+  std::cout << "Z3: Restart" << std::endl;
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
   /* FIXME: check what exactly is the differenc between Reset and Restart.. */
@@ -103,7 +104,7 @@ void Restart(Z3_theory theory) {
 
 template <template <typename > class Utvpi, typename T>
 Z3_bool FinalCheck(Z3_theory theory) {
-  std::cout << "-> Final check" << std::endl;
+  std::cout << "Z3: Final check" << std::endl;
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
   if (data->graph.Satisfiable())
@@ -157,7 +158,7 @@ void NewAssignment(Z3_theory theory, Z3_ast ast, Z3_bool value) {
 
   Z3_context context = Z3_theory_get_context(theory);
 
-  std::cout << "-> Assigned " << Z3_ast_to_string(context, ast)
+  std::cout << "Z3: Assigned " << Z3_ast_to_string(context, ast)
             << " to " << static_cast<int>(value) << std::endl
             << "Updating graph." << std::endl;
 
