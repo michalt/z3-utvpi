@@ -191,4 +191,36 @@ void UtvpiGraph<T>::AddWeightRollback(Vertex src, T weight, Vertex trg) {
   std::cout << "after2" << std::endl;
 }
 
+template <typename T>
+void UtvpiGraph<T>::Pop() {
+  std::cout << "UtvpiGraph: Pop" << std::endl;
+  std::list<Rollback *> *list = logs_.front();
+  logs_.pop_front();
+
+  for (auto &r : *list) {
+    r->Execute(*this);
+    delete r;
+  }
+}
+
+template <typename T>
+void UtvpiGraph<T>::Push() {
+  std::cout << "UtvpiGraph: Push" << std::endl;
+  logs_.push_front(new std::list<Rollback *>());
+}
+
+/**
+ * Clear everything. The state is the same as just after constructing the graph.
+ */
+template <typename T>
+void UtvpiGraph<T>::Reset() {
+  std::cout << "UtvpiGraph: Reset" << std::endl;
+  graph_.clear();
+  vertex_map_.clear();
+  logs_.clear();
+  logs_.push_front(new std::list<Rollback *>());
+  special_vertex_ = boost::add_vertex(graph_);
+}
+
+
 #endif /* UTVPI_GRAPH_INL_H */

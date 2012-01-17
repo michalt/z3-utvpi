@@ -27,6 +27,10 @@ class UtvpiGraph {
     void AddInequality(Sign a, VarId x, T c);
     void AddInequality(Sign a, VarId x, Sign b, VarId y, T c);
 
+    void Push();
+    void Pop();
+    void Reset();
+
     // Should be defined by the classes that inherit from this one.
     // virtual bool CheckSat() = 0;
 
@@ -57,6 +61,9 @@ class UtvpiGraph {
      * Methods
      */
 
+    UtvpiGraph(const UtvpiGraph<T> &);
+    UtvpiGraph<T> operator=(const UtvpiGraph<T> &);
+
     Vertex LookupAddVertex(Sign, VarId x);
     Edge UpdateAddEdge(Vertex src, T weight, Vertex trg);
 
@@ -66,8 +73,6 @@ class UtvpiGraph {
 
     void AddEdgeRollback(Vertex src, Vertex trg);
     void AddWeightRollback(Vertex src, T weight, Vertex trg);
-
-    void GoBack();
 
     /*
      * Members
@@ -92,6 +97,7 @@ class UtvpiGraph {
       public:
         EdgeRollback(Vertex s, Vertex t) : s_(s), t_(t) { }
         void Execute(UtvpiGraph<T>& graph) {
+          std::cout << "EdgeRollback" << std::endl;
           graph.RemoveEdge(s_, t_);
         }
       private:
@@ -102,6 +108,7 @@ class UtvpiGraph {
       public:
         WeightRollback(Vertex s, T w, Vertex t) : s_(s), t_(t), w_(w) { }
         void Execute(UtvpiGraph<T>& graph) {
+          std::cout << "WeightRollback" << std::endl;
           graph.SetEdge(s_, w_, t_);
         }
       private:
