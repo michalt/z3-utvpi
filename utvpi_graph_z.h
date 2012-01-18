@@ -1,19 +1,17 @@
 #ifndef UTVPI_GRAPH_Z_H
 #define UTVPI_GRAPH_Z_H
 
-#include <boost/graph/bellman_ford_shortest_paths.hpp>
-
 #include "utvpi_graph.h"
 
 template <typename T>
 class UtvpiGraphZ : public UtvpiGraph<T> {
   public:
-    bool Satisfiable();
+    std::pair<bool, std::list<ReasonPtr>*> Satisfiable();
 
   private:
     /*
      * Unfortunately since the base class is a template, we need to stick this->
-     * everywhere.. Annoying.
+     * everywhere and define typedefs again.. Annoying.
      */
     typedef typename UtvpiGraph<T>::Graph Graph;
     typedef typename UtvpiGraph<T>::Vertex Vertex;
@@ -21,15 +19,27 @@ class UtvpiGraphZ : public UtvpiGraph<T> {
     typedef typename UtvpiGraph<T>::Edge Edge;
     typedef typename UtvpiGraph<T>::EdgeIter EdgeIter;
 
-    std::list<Edge>* GetNegativeCycle(const Edge &start_edge,
-        const std::vector<Vertex> &parent);
+    typedef typename UtvpiGraph<T>::ReasonMap ReasonMap;
+    typedef typename UtvpiGraph<T>::NegVisitor NegVisitor;
 
-    struct NegVisitor : public boost::bellman_visitor<> {
-      void edge_not_minimized(Edge e, Graph &g) {
-        std::cout << "## edge not minimized ##" << e << std::cout;
-        neg_edge = e;
-      }
-      Edge neg_edge;
+    class BfsVisitor : public boost::default_bfs_visitor {
+      public:
+        BfsVisitor(std::vector<Vertex> &p, Vertex t) : parent_(p), target_(t) { }
+
+        void SetTarget(Vertex t) { target_ = t; }
+
+        void tree_edge(Edge e, const Graph& g) {
+          parent_[boost::target(e, g)] = boost::source(e, g);
+        }
+
+        void discover_vertex(Vertex u, const Graph&) {
+          if (u == target_)
+            throw true;
+        }
+
+      private:
+        std::vector<Vertex> &parent_;
+        Vertex target_;
     };
 
 };

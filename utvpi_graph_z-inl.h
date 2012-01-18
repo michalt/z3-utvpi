@@ -2,15 +2,19 @@
 #define UTVPI_GRAPH_Z_INL_H
 
 #include <unordered_set>
+#include <tuple>
 
 #include <boost/graph/lookup_edge.hpp>
+#include <boost/graph/dijkstra_shortest_paths.hpp>
+#include <boost/graph/bellman_ford_shortest_paths.hpp>
 
 /*
  * Unfortunately since the base class is a template, we need to stick this->
  * everywhere.. Annoying.
  */
 template <typename T>
-bool UtvpiGraphZ<T>::Satisfiable() {
+std::pair<bool, std::list<ReasonPtr>* >
+UtvpiGraphZ<T>::Satisfiable() {
 
   std::size_t graph_size = boost::num_vertices(this->graph_);
 
@@ -27,23 +31,34 @@ bool UtvpiGraphZ<T>::Satisfiable() {
      weight_map(boost::get(boost::edge_bundle, this->graph_)).
      distance_map(&distance[0]).
      predecessor_map(&parent[0]).
-     visitor(neg_visitor));
+     visitor(neg_visitor).
+     distance_combine(custom_plus<T>()));
 
 #ifdef DEBUG
-  VertexIter v_iter, v_end;
-  for (boost::tie(v_iter, v_end) = boost::vertices(this->graph_);
-      v_iter != v_end;
-      ++v_iter) {
-    std::cout << "Vertex: " << this->graph_[*v_iter]
-              << ", its parent: " << parent[*v_iter]
-              << ", its distance: " << distance[*v_iter]
-              << std::endl;
+  {
+    VertexIter v_iter, v_end;
+    for (boost::tie(v_iter, v_end) = boost::vertices(this->graph_);
+        v_iter != v_end;
+        ++v_iter) {
+      std::cout << "Vertex: " << this->graph_[*v_iter]
+                << ", its parent: " << parent[*v_iter]
+                << ", its distance: " << distance[*v_iter]
+                << std::endl;
+    }
   }
 #endif
 
+  auto neg_cycle = new std::list<ReasonPtr>();
   if (!no_neg_cycle) {
     std::cout << "Found negative cycle without tightening!" << std::endl;
-    return false;
+    neg_cycle = GetNegativeCycle(*neg_visitor.neg_edge, parent);
+    assert(neg_cycle != NULL);
+    for (auto r : *neg_cycle) {
+      std::cout << "Negative cycle: "
+                << *r
+                << std::endl;
+    }
+    return std::make_pair(false, neg_cycle);
   }
 
   Graph tmp_graph(graph_size);
@@ -53,6 +68,9 @@ bool UtvpiGraphZ<T>::Satisfiable() {
 
   /* Vertex in graph_ -> bool */
   std::vector<bool> in_tmp(graph_size, false);
+
+  /* Reasons for the induced graph. */
+  ReasonMap tmp_reasons;
 
   /*
    * Now we need to create the induced graph by taking those edges from the
@@ -100,12 +118,14 @@ bool UtvpiGraphZ<T>::Satisfiable() {
 
     tmp_edge = boost::add_edge(tmp_src, tmp_trg, tmp_graph).first;
     tmp_graph[tmp_edge] = this->graph_[*e_iter];
+    tmp_reasons[std::make_pair(tmp_src, tmp_trg)] =
+      this->reasons_[std::make_pair(src, trg)];
 
   }
 
   size_t tmp_size = boost::num_vertices(tmp_graph);
 
-  std::vector<int> component(tmp_size), discover_time(tmp_size);
+  std::vector<Vertex> component(tmp_size), discover_time(tmp_size);
   std::vector<boost::default_color_type> color(tmp_size);
   std::vector<Vertex> root(tmp_size);
 
@@ -116,7 +136,7 @@ bool UtvpiGraphZ<T>::Satisfiable() {
 
   if (num == tmp_size) {
     /* No two vertices are in the same component. */
-    return true;
+    return std::make_pair(true, neg_cycle );
   }
 
   /*
@@ -144,45 +164,15 @@ bool UtvpiGraphZ<T>::Satisfiable() {
     if (component[tmp_vertex] == component[tmp_neg_vertex]
         && (distance[vertex] - distance[neg_vertex]) % 2 != 0) {
       std::cout << "Found negative cycle by tightening!" << std::endl;
-      return false;
+      neg_cycle = GetNegativeCycle(tmp_vertex, tmp_neg_vertex, tmp_graph,
+          tmp_reasons);
+      return std::make_pair(false, neg_cycle);
     }
   }
 
-  return true;
+  return std::make_pair(true, neg_cycle);
 }
 
-template <typename T>
-std::list<typename UtvpiGraphZ<T>::Edge>* UtvpiGraphZ<T>::GetNegativeCycle(const Edge &start_edge,
-    const std::vector<Vertex> &parent) {
 
-  std::unordered_set<Vertex> so_far;
-  Vertex cycle_vertex = boost::target(start_edge, this->graph_);
-
-  // FIXME: probably not needed
-  // Vertex vertex = boost::source(start_edge, graph_);
-
-  // FIXME: add an assert for the size of parent
-  while (so_far.find() == so_far.end()) {
-    so_far.insert(cycle_vertex);
-    cycle_vertex = parent[cycle_vertex];
-  }
-
-
-  /* Record the vertex that starts/ends the cycle. */
-  Vertex src, trg = cycle_vertex;
-  Edge edge;
-  bool exists = false;
-  std::list<Edge> cycle;
-
-  do {
-    src = parent[trg];
-    tie(edge, exists) = boost::lookup_edge(src, trg, this->graph_);
-    assert(exists);
-    cycle.push_front(edge);
-    trg = src;
-  } while (trg != cycle_vertex);
-
-  return cycle;
-}
 
 #endif /* UTVPI_GRAPH_Z_INL_H */

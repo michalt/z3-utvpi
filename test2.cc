@@ -5,16 +5,28 @@
 #include <z3.h>
 
 #include "utvpi_graph_z.h"
-// #include "utvpi_graph_q.h"
+#include "utvpi_graph_q.h"
 #include "utvpi_theory.h"
+
+namespace boost {
+  template <>
+  struct closed_plus<mpz_class> {
+    mpz_class operator()(const mpz_class& a, const mpz_class& b) const {
+      return a + b;
+    }
+  };
+}
 
 int main(int argc, char *argv[]) {
   Z3_context ctx = MkContext();
   Z3_theory theory = MkTheory<UtvpiGraphZ, int>(ctx);
+  // Z3_theory theory = MkTheory<UtvpiGraphZ, mpz_class>(ctx);
+  // Z3_theory theory = MkTheory<UtvpiGraphQ, mpq_class>(ctx);
 
   std::cout << "Parsing..." << std::endl;
   // FIXME: don't pass only NULL here --- may cause segfault!
   Z3_ast formula = Z3_parse_smtlib2_file(ctx, "test.smt", 0, 0, 0, 0, 0, 0);
+  // Z3_ast formula = Z3_parse_smtlib2_file(ctx, "tightening_example.smt", 0, 0, 0, 0, 0, 0);
   if (formula == NULL) {
     std::cout << "Parsing failed!!!" << std::endl;
   }

@@ -12,6 +12,8 @@
 
 #include <z3.h>
 
+#include "reason.h"
+
 /*
  * A few helper functions.
  */
@@ -22,25 +24,24 @@ void Die(const char *msg) {
 }
 
 void ErrorHandler(Z3_error_code e) {
-  std::cout << "Error code: " << e << std::endl;
+  std::cerr << "Error code: " << e << std::endl;
   Die("incorrect use of Z3.");
 }
 
 
 Z3_context MkContext() {
   Z3_config  cfg = Z3_mk_config();
-  Z3_set_param_value(cfg, "MODEL", "true");
 
-  Z3_context ctx = Z3_mk_context(cfg);
+  Z3_context context = Z3_mk_context(cfg);
 
 #ifdef TRACING
-  Z3_trace_to_stderr(ctx);
+  Z3_trace_to_stderr(context);
 #endif
 
-  Z3_set_error_handler(ctx, ErrorHandler);
+  Z3_set_error_handler(context, ErrorHandler);
 
   Z3_del_config(cfg);
-  return ctx;
+  return context;
 }
 
 
@@ -49,47 +50,38 @@ Z3_context MkContext() {
  */
 
 /* Should we put them into UtvpiData? */
-static const char *predicate_name = "Utvpi";
-static const unsigned int predicate_arity = 5;
-static const char *sign_name = "Sign";
-static const char *minus_name = "Minus";
-static const char *plus_name = "Plus";
+static const char        *utvpi_name  = "Utvpi";
+static const char        *svpi_name   = "Svpi";
+static const unsigned int utvpi_arity = 5;
+static const unsigned int svpi_arity  = 3;
+static const char        *sign_name   = "Sign";
+static const char        *minus_name  = "Minus";
+static const char        *plus_name   = "Plus";
 
-/*
- * Stores all the necessary data for the theory. Note that predicate, minus and
- * plus should really be constants, however, this seems problematic. To create
- * them using Z3 API we need to create UtvpiData object first, but that would
- * require creating the predicate, minus and plus...
- */
-template <template <typename> class Utvpi, typename T>
-struct UtvpiData {
-  Z3_func_decl predicate;
-  Z3_ast plus, minus;
-  Utvpi<T> graph;
-};
 
 
 template <template <typename > class Utvpi, typename T>
 void NewEquality(Z3_theory theory, Z3_ast ast1, Z3_ast ast2) {
+
   Z3_context context = Z3_theory_get_context(theory);
+
+#ifdef DEBUG
   std::cout << "Z3: NewEquality: "
             << Z3_ast_to_string(context, ast1)
             << " == "
             << Z3_ast_to_string(context, ast2)
             << std::endl;
+#endif
 
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
 
-  // FIXME: check if both are variables!!
-
-  // FIXME: check if we need to handle the equivalence classes
-
   VarId x = Z3_get_ast_id(context, ast1);
   VarId y = Z3_get_ast_id(context, ast2);
+  data->id_to_ast[x] = ast1;
+  data->id_to_ast[y] = ast2;
 
-  data->graph.AddInequality(Pos, x, Neg, y, 0);
-  data->graph.AddInequality(Pos, y, Neg, x, 0);
+  data->graph.AddEquality(x, y);
 }
 
 template <template <typename > class Utvpi, typename T>
@@ -121,17 +113,53 @@ void Restart(Z3_theory theory) {
   std::cout << "Z3: Restart" << std::endl;
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
-  /* FIXME: check what exactly is the differenc between Reset and Restart.. */
   data->graph.Reset();
 }
 
 template <template <typename > class Utvpi, typename T>
-Z3_bool FinalCheck(Z3_theory theory) {
-  std::cout << "Z3: Final check" << std::endl;
+Z3_bool SatCheck(Z3_theory theory) {
+
+#ifdef DEBUG
+  std::cout << "Checking satisfiability..." << std::endl;
+#endif
+
+  Z3_context context = Z3_theory_get_context(theory);
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
   data->graph.Print();
-  return data->graph.Satisfiable();
+
+  bool sat;
+  std::list<ReasonPtr> *cycle;
+  std::tie(sat, cycle) = data->graph.Satisfiable();
+
+  if (sat)
+    return Z3_TRUE;
+
+  /* There must be at least one edge. */
+  assert(cycle->size() > 0);
+
+  Z3_ast conflict = cycle->front()->MkAst(context, data->id_to_ast, data->utvpi,
+      data->svpi, data->minus, data->plus);
+  cycle->pop_front();
+
+  Z3_ast tmp[2];
+  for (auto r : *cycle) {
+    std::cout << *r << std::endl;
+    tmp[0] = conflict;
+    tmp[1] = r->MkAst(context, data->id_to_ast, data->utvpi, data->svpi,
+        data->minus, data->plus);
+    conflict = Z3_mk_and(context, 2, tmp);
+
+  }
+  conflict = Z3_mk_not(context, conflict);
+
+#ifdef DEBUG
+  std::cout << "SatCheck: asserting theory axiom:" << std::endl;
+  std::cout << Z3_ast_to_string(context, conflict) << std::endl;
+#endif
+
+  Z3_theory_assert_axiom(theory, conflict);
+  return Z3_FALSE;
 }
 
 Sign ArgToSign(Z3_ast &minus, Z3_ast &plus, Z3_ast &ast) {
@@ -139,6 +167,13 @@ Sign ArgToSign(Z3_ast &minus, Z3_ast &plus, Z3_ast &ast) {
     return Pos;
   assert(ast == minus);
   return Neg;
+}
+
+template <template <typename> class Utvpi, typename T>
+Z3_ast SignToArg(UtvpiData<Utvpi, T> *data, Sign sign) {
+  if (sign == Pos)
+    return data->plus;
+  return data->minus;
 }
 
 /*
@@ -162,6 +197,7 @@ template <>
 Z3_bool GetNumeral(Z3_context context, Z3_ast ast, mpz_class& result) {
   Z3_string str = Z3_get_numeral_string(context, ast);
   result = mpz_class(static_cast<const char*>(str));
+  return Z3_TRUE;
 }
 
 template <>
@@ -180,9 +216,15 @@ void NewAssignment(Z3_theory theory, Z3_ast ast, Z3_bool value) {
 
   Z3_context context = Z3_theory_get_context(theory);
 
-  std::cout << "Z3: Assigned " << Z3_ast_to_string(context, ast)
-            << " to " << static_cast<int>(value) << std::endl
-            << "Updating graph." << std::endl;
+#ifdef DEBUG
+  std::cout << "Z3: Assigned "
+            << Z3_ast_to_string(context, ast)
+            << " to "
+            << static_cast<int>(value)
+            << std::endl
+            << "Updating graph."
+            << std::endl;
+#endif
 
   if (value != Z3_TRUE) {
     std::cout << "NewAssignment: something is not true. Ignoring.."
@@ -196,89 +238,102 @@ void NewAssignment(Z3_theory theory, Z3_ast ast, Z3_bool value) {
 
   assert(predicate_decl != NULL);
 
-  unsigned int num_args = Z3_get_app_num_args(context, app_ast);
-
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
 
-  if (predicate_decl != data->predicate || num_args != predicate_arity) {
-    std::cout << "NewAssignment: unknown format of predicate." << std::endl;
-    return;
+  unsigned int num_args = Z3_get_app_num_args(context, app_ast);
+  if (predicate_decl == data->utvpi && num_args == utvpi_arity) {
+
+    Z3_ast arg0 = Z3_get_app_arg (context, app_ast, 0);
+    Z3_ast arg1 = Z3_get_app_arg (context, app_ast, 1);
+    Z3_ast arg2 = Z3_get_app_arg (context, app_ast, 2);
+    Z3_ast arg3 = Z3_get_app_arg (context, app_ast, 3);
+    Z3_ast arg4 = Z3_get_app_arg (context, app_ast, 4);
+
+    Sign a = ArgToSign(data->minus, data->plus, arg0);
+    Sign b = ArgToSign(data->minus, data->plus, arg2);
+    VarId x = Z3_get_ast_id(context, arg1);
+    VarId y = Z3_get_ast_id(context, arg3);
+    data->id_to_ast[x] = arg1;
+    data->id_to_ast[y] = arg3;
+
+    T c;
+    bool success = GetNumeral(context, arg4, c);
+
+    if (!success)
+      Die("Failed to get the numeral!");
+
+    data->graph.AddInequality(a, x, b, y, c);
+  } else if (predicate_decl == data->svpi && num_args == svpi_arity) {
+
+    Z3_ast arg0 = Z3_get_app_arg (context, app_ast, 0);
+    Z3_ast arg1 = Z3_get_app_arg (context, app_ast, 1);
+    Z3_ast arg2 = Z3_get_app_arg (context, app_ast, 2);
+
+    Sign a = ArgToSign(data->minus, data->plus, arg0);
+    VarId x = Z3_get_ast_id(context, arg1);
+    data->id_to_ast[x] = arg1;
+
+    T c;
+    bool success = GetNumeral(context, arg2, c);
+
+    if (!success)
+      Die("Failed to get the numeral!");
+
+    data->graph.AddInequality(a, x, c);
+  } else {
+    /* We should never get here.. */
+    assert(false);
   }
 
-  Z3_ast arg0 = Z3_get_app_arg (context, app_ast, 0);
-  Z3_ast arg1 = Z3_get_app_arg (context, app_ast, 1);
-  Z3_ast arg2 = Z3_get_app_arg (context, app_ast, 2);
-  Z3_ast arg3 = Z3_get_app_arg (context, app_ast, 3);
-  Z3_ast arg4 = Z3_get_app_arg (context, app_ast, 4);
-
-  std::cout << "id 0 = " << Z3_get_ast_id(context, arg0) << std::endl;
-  std::cout << "id 1 = " << Z3_get_ast_id(context, arg1) << std::endl;
-  std::cout << "id 2 = " << Z3_get_ast_id(context, arg2) << std::endl;
-  std::cout << "id 3 = " << Z3_get_ast_id(context, arg3) << std::endl;
-  std::cout << "id 4 = " << Z3_get_ast_id(context, arg4) << std::endl;
-
-  Sign a = ArgToSign(data->minus, data->plus, arg0);
-  Sign b = ArgToSign(data->minus, data->plus, arg2);
-  VarId x = Z3_get_ast_id(context, arg1);
-  VarId y = Z3_get_ast_id(context, arg3);
-
-  // std::cout << "Argument: " << Z3_ast_to_string(context, arg0) << std::endl;
-  // std::cout << "Argument: " << Z3_ast_to_string(context, arg1) << std::endl;
-  // std::cout << "Argument: " << Z3_ast_to_string(context, arg2) << std::endl;
-  // std::cout << "Argument: " << Z3_ast_to_string(context, arg3) << std::endl;
-  // std::cout << "Argument: " << Z3_ast_to_string(context, arg4) << std::endl;
-
-  T c;
-  bool success = GetNumeral(context, arg4, c);
-
-  if (!success)
-    Die("Failed to get the numeral!");
-
-  data->graph.AddInequality(a, x, b, y, c);
 }
 
 
+template <typename T>
+struct CustomSort {
+  CustomSort(Z3_context context) : sort(Z3_mk_int_sort(context)) { }
+  Z3_sort sort;
+};
 
+template <>
+struct CustomSort<mpq_class> {
+  CustomSort(Z3_context context) : sort(Z3_mk_real_sort(context)) { }
+  Z3_sort sort;
+};
 
 template <template <typename > class Utvpi, typename T>
-Z3_theory MkTheory(Z3_context ctx) {
+Z3_theory MkTheory(Z3_context context) {
   UtvpiData<Utvpi, T> *data = new UtvpiData<Utvpi, T>();
-  Z3_theory theory = Z3_mk_theory(ctx, "UTVPI", data);
+  Z3_theory theory = Z3_mk_theory(context, "UTVPI", data);
 
-  Z3_symbol utvpi_sym = Z3_mk_string_symbol(ctx, "Utvpi");
-  Z3_symbol sign_sym = Z3_mk_string_symbol(ctx, "Sign");
-  Z3_symbol plus_sym = Z3_mk_string_symbol(ctx, "Plus");
-  Z3_symbol minus_sym = Z3_mk_string_symbol(ctx, "Minus");
+  Z3_symbol utvpi_sym = Z3_mk_string_symbol(context, utvpi_name);
+  Z3_symbol svpi_sym = Z3_mk_string_symbol(context, svpi_name);
+  Z3_symbol sign_sym = Z3_mk_string_symbol(context, sign_name);
+  Z3_symbol plus_sym = Z3_mk_string_symbol(context, plus_name);
+  Z3_symbol minus_sym = Z3_mk_string_symbol(context, minus_name);
 
-  Z3_sort int_sort = Z3_mk_int_sort(ctx);
-  Z3_sort bool_sort = Z3_mk_bool_sort(ctx);
-  Z3_sort sign_sort = Z3_theory_mk_sort(ctx, theory, sign_sym); 
+  Z3_sort domain_sort = CustomSort<T>(context).sort;
+  Z3_sort bool_sort = Z3_mk_bool_sort(context);
+  Z3_sort sign_sort = Z3_theory_mk_sort(context, theory, sign_sym);
 
-  Z3_sort domain[5] = { sign_sort, int_sort, sign_sort, int_sort, int_sort };
+  Z3_sort utvpi_domain[5] = { sign_sort, domain_sort, sign_sort, domain_sort,
+    domain_sort };
+  Z3_sort svpi_domain[3] = { sign_sort, domain_sort, domain_sort };
 
-  data->predicate = Z3_theory_mk_func_decl(ctx, theory, utvpi_sym, 5, domain, bool_sort);
-  data->minus = Z3_theory_mk_constant(ctx, theory, plus_sym, sign_sort);
-  data->plus = Z3_theory_mk_constant(ctx, theory, minus_sym, sign_sort);
+  data->utvpi = Z3_theory_mk_func_decl(context, theory, utvpi_sym, 5,
+      utvpi_domain, bool_sort);
+  data->svpi = Z3_theory_mk_func_decl(context, theory, svpi_sym, 3,
+      svpi_domain, bool_sort);
+  data->minus = Z3_theory_mk_constant(context, theory, minus_sym, sign_sort);
+  data->plus = Z3_theory_mk_constant(context, theory, plus_sym, sign_sort);
 
   Z3_set_new_assignment_callback(theory, NewAssignment<Utvpi, T>);
   Z3_set_push_callback(theory, Push<Utvpi, T>);
   Z3_set_pop_callback(theory, Pop<Utvpi, T>);
-  Z3_set_final_check_callback(theory, FinalCheck<Utvpi, T>);
+  Z3_set_final_check_callback(theory, SatCheck<Utvpi, T>);
   Z3_set_new_eq_callback(theory, NewEquality<Utvpi, T>);
   Z3_set_reset_callback(theory, Reset<Utvpi, T>);
   Z3_set_restart_callback(theory, Restart<Utvpi, T>);
-
-  // probably needed later on:
-  // Z3_set_init_search_callback(theory, InitSearch<T>);
-  // Z3_set_new_diseq_callback(theory, Th_new_diseq);
-  //
-  // probably not needed:
-  // Z3_set_new_relevant_callback(theory, Th_new_relevant);
-  // Z3_set_delete_callback(theory, Th_delete);
-  // Z3_set_reduce_app_callback(theory, Th_reduce_app);
-  // Z3_set_new_app_callback(theory, Th_new_app);
-  // Z3_set_new_elem_callback(theory, Th_new_elem);
 
   return theory;
 }

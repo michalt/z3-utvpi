@@ -1,6 +1,8 @@
 #ifndef UTVPI_GRAPH_INL_H
 #define UTVPI_GRAPH_INL_H
 
+#include <unordered_set>
+
 #include <boost/graph/bellman_ford_shortest_paths.hpp>
 #include <boost/graph/strong_components.hpp>
 
@@ -28,6 +30,8 @@ void UtvpiGraph<T>::Print() {
               << var_trg.first
               << var_trg.second
               << "(" << trg << ")"
+              << " because "
+              << *reasons_[std::make_pair(src, trg)]
               << std::endl;
   }
 }
@@ -45,7 +49,6 @@ UtvpiGraph<T>::LookupAddVertex(Sign sign, VarId var_x) {
   if (iter == vertex_map_.end()) {
     x = boost::add_vertex(graph_);
     vertex_map_[s_var] = x;
-    std::cout << "Added " << x << std::endl;
 
     /* Every vertex must have an edge from the special_vertex_ with weight 0. */
     Edge e = boost::add_edge(special_vertex_, x, graph_).first;
@@ -53,7 +56,6 @@ UtvpiGraph<T>::LookupAddVertex(Sign sign, VarId var_x) {
   }
   else {
     x = iter->second;
-    std::cout << "Found " << x << std::endl;
   }
 
   /* Record the actual variable with sign. */
@@ -64,9 +66,11 @@ UtvpiGraph<T>::LookupAddVertex(Sign sign, VarId var_x) {
 /* Assumes that the vertices exist in the graph. */
 template <typename T>
 typename UtvpiGraph<T>::Edge
-UtvpiGraph<T>::UpdateAddEdge(Vertex src, T weight, Vertex trg) {
+UtvpiGraph<T>::UpdateAddEdge(Vertex src, T weight, Vertex trg, ReasonPtr reason) {
 
   std::cout << "UpdateAddEdge: trying search for " << src << " -> " << trg << std::endl;
+
+  // tie(edge, exists) = boost::lookup_edge(src, trg, this->graph_);
 
   OutEdgeIter iter, end;
   for (boost::tie(iter, end) = boost::out_edges(src, graph_);
@@ -76,6 +80,7 @@ UtvpiGraph<T>::UpdateAddEdge(Vertex src, T weight, Vertex trg) {
       /* Found the edge! Update the weight if necessary. */
       if (weight < graph_[*iter]) {
         graph_[*iter] = weight;
+        reasons_[std::make_pair(src, trg)] = reason;
         AddWeightRollback(src, weight, trg);
       }
       return *iter;
@@ -87,6 +92,7 @@ UtvpiGraph<T>::UpdateAddEdge(Vertex src, T weight, Vertex trg) {
   /* We haven't found the edge, so we need to create it. */
   Edge edge = boost::add_edge(src, trg, graph_).first;
   graph_[edge] = weight;
+  reasons_[std::make_pair(src, trg)] = reason;
   AddEdgeRollback(src, trg);
 
   std::cout << "UpdateAddEdge: returning" << std::endl;
@@ -138,23 +144,23 @@ void UtvpiGraph<T>::RemoveEdge(Vertex src, Vertex trg) {
 template <typename T>
 void UtvpiGraph<T>::AddInequality(Sign a, VarId var_x, Sign b, VarId var_y, T c) {
 
-  std::cout << "UtvpiGraph: AddInequality: " << a << var_x << " " << b << var_y << std::endl;
-
   Vertex x = LookupAddVertex(a, var_x);
   Vertex y = LookupAddVertex(b, var_y);
 
   Vertex x_neg = LookupAddVertex(negate(a), var_x);
   Vertex y_neg = LookupAddVertex(negate(b), var_y);
 
-  std::cout << "AddInequality: after vertices" << std::endl;
+  std::shared_ptr<Reason> reason(new Inequality2<T>(a, var_x, b, var_y, c));
+  UpdateAddEdge(y_neg, c, x, reason);
+  UpdateAddEdge(x_neg, c, y, reason);
 
-  UpdateAddEdge(y_neg, c, x);
-  // std::cout << "adding " << y_neg << " " << x << std::endl;
-  UpdateAddEdge(x_neg, c, y);
-  // std::cout << "adding " << x_neg << " " << y << std::endl;
-
-  std::cout << "AddInequality: returning" << std::endl;
 }
+
+/*
+void AddUpdateReason(Vertex x, Vertex y, std::shared_ptr<Reason> reason) {
+  reasons_[std::make_pair(x, y)] = reason;
+}
+*/
 
 /*
  * This is a simple inequality. We need to add just one edge:
@@ -170,8 +176,26 @@ void UtvpiGraph<T>::AddInequality(Sign a, VarId var_x, T c) {
 
   Vertex x_neg = LookupAddVertex(negate(a), var_x);
 
-  UpdateAddEdge(x_neg, 2 * c, x);
+  std::shared_ptr<Reason> reason(new Inequality1<T>(a, var_x, c));
+
+  UpdateAddEdge(x_neg, 2 * c, x, reason);
 }
+
+template <typename T>
+void UtvpiGraph<T>::AddEquality(VarId var_x, VarId var_y) {
+
+
+  Vertex x = LookupAddVertex(Pos, var_x);
+  Vertex y = LookupAddVertex(Pos, var_y);
+
+  std::shared_ptr<Reason> reason(new Equality(var_x, var_y));
+  UpdateAddEdge(x, 0, y, reason);
+  UpdateAddEdge(y, 0, x, reason);
+  // std::cout << "adding " << y_neg << " " << x << std::endl;
+  // std::cout << "adding " << x_neg << " " << y << std::endl;
+}
+
+
 
 template <typename T>
 void UtvpiGraph<T>::AddEdgeRollback(Vertex src, Vertex trg) {
@@ -229,5 +253,108 @@ void UtvpiGraph<T>::Reset() {
   special_vertex_ = boost::add_vertex(graph_);
 }
 
+template <typename T>
+std::list<ReasonPtr>*
+UtvpiGraph<T>::GetNegativeCycle(const Edge &start_edge,
+    const std::vector<Vertex> &parent) {
+
+  std::unordered_set<Vertex> so_far;
+  Vertex cycle_vertex = boost::target(start_edge, this->graph_);
+
+  while (so_far.find(cycle_vertex) == so_far.end()) {
+    so_far.insert(cycle_vertex);
+    std::cout << "one " << cycle_vertex << std::endl;
+    cycle_vertex = parent[cycle_vertex];
+    std::cout << "two" << std::endl;
+  }
+
+  /* Record the vertex that starts/ends the cycle. */
+  Vertex src, trg = cycle_vertex;
+  Edge edge;
+  auto cycle = new std::list<ReasonPtr>();
+
+  do {
+    src = parent[trg];
+    ReasonPtr ptr = this->reasons_[std::make_pair(src, trg)];
+    assert(ptr != NULL);
+    cycle->push_front(ptr);
+    trg = src;
+  } while (trg != cycle_vertex);
+
+  cycle->unique();
+  return cycle;
+}
+
+template <typename T>
+std::list<ReasonPtr>*
+UtvpiGraph<T>::GetNegativeCycle(const Vertex &start_vertex,
+    const Vertex &neg_start_vertex, const Graph &tmp_graph,
+    const ReasonMap &tmp_reasons) {
+
+  std::size_t graph_size = boost::num_vertices(tmp_graph);
+
+  std::vector<T> distance(graph_size, 0);
+  std::vector<Vertex> parent(graph_size, 0);
+  std::vector<Vertex> weights(graph_size, 0);
+
+  /* FIXME: check for exceptions from tmp_reasons.at(..) */
+
+  BfsVisitor vis(parent, neg_start_vertex);
+  try {
+    breadth_first_search(tmp_graph, start_vertex, boost::visitor(vis));
+    assert(false);
+  } catch (bool x) { }
+
+  // for (auto i : parent) {
+    // std::cout << i << std::endl;
+  // }
+  /* This should be probably just a BFS or DFS.. */
+  // boost::dijkstra_shortest_paths(tmp_graph, start_vertex,
+     // boost::weight_map(boost::get(boost::edge_bundle, tmp_graph)).
+     // distance_map(&distance[0]).predecessor_map(&parent[0]));
+
+  auto cycle = new std::list<ReasonPtr>();
+  Vertex src, trg = neg_start_vertex;
+
+  do {
+    src = parent[trg];
+    ReasonPtr ptr = tmp_reasons.at(std::make_pair(src, trg));
+    std::cout << src << " -> " << trg << std::endl;
+    assert(ptr != NULL);
+    cycle->push_front(ptr);
+    trg = src;
+  } while (trg != start_vertex);
+
+  std::cout << "FOOBAR" << std::endl;
+
+  // boost::dijkstra_shortest_paths(tmp_graph, neg_start_vertex,
+     // boost::weight_map(boost::get(boost::edge_bundle, tmp_graph)).
+     // distance_map(&distance[0]).predecessor_map(&parent[0]));
+
+  /* We can use parent vector without any resetting --- the parents should be
+   * simply overwritten. */
+  vis.SetTarget(start_vertex);
+  try {
+    breadth_first_search(tmp_graph, neg_start_vertex, boost::visitor(vis));
+    assert(false);
+  } catch (bool x) { }
+
+  trg = start_vertex;
+  do {
+    src = parent[trg];
+    ReasonPtr ptr = tmp_reasons.at(std::make_pair(src, trg));
+    std::cout << src << " -> " << trg << std::endl;
+    assert(ptr != NULL);
+    cycle->push_front(ptr);
+    trg = src;
+  } while (trg != neg_start_vertex);
+
+  for (auto r : *cycle) {
+    std::cout << *r << std::endl;
+  }
+  std::cout << "GetNegativeCycle retuns.." << std::endl;
+  cycle->unique();
+  return cycle;
+}
 
 #endif /* UTVPI_GRAPH_INL_H */
