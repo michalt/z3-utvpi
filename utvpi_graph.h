@@ -34,7 +34,7 @@ class UtvpiGraph {
     // Should be defined by the classes that inherit from this one.
     // virtual bool CheckSat() = 0;
 
-  public:
+  protected:
     /* Forward declaration for nested class. */
     class Rollback;
 
@@ -115,6 +115,7 @@ class UtvpiGraph {
         Vertex s_, t_;
         T w_;
     };
+
 };
 
 #include "utvpi_graph-inl.h"
