@@ -276,7 +276,7 @@ UtvpiGraph<T>::GetNegativeCycle(const Edge &start_edge,
 #ifdef VERBOSE
   std::cout << "UtvpiGraph: Reason for negative cycle:" << std::endl;
   for (auto r : *cycle) {
-    std::cout << *r << std::endl;
+    std::cout << "\t" << *r << std::endl;
   }
 #endif
 

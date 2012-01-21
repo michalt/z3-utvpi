@@ -1,10 +1,11 @@
 CC=g++
-CXXFLAGS=-std=c++0x -Wall -DVERBOSE -DDEBUG
+CXXFLAGS=-std=c++0x -Wall -DVERBOSE
+# CXXFLAGS=-std=c++0x -Wall -DVERBOSE -DDEBUG
 #-Weffc++
 # LIBS=-lgmpxx -lgmp
 LIBS=-lz3 -fopenmp -lgmpxx -lgmp
-Z3_INCLUDE=/home/m/software/z3/include/
-Z3_LIB=/home/m/software/z3/lib/
+Z3_INCLUDE=$(Z3_DIR)/include/
+Z3_LIB=$(Z3_DIR)/lib/
 
 all: test
 

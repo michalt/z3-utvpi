@@ -2,14 +2,13 @@
 #define UTVPI_GRAPH_H
 
 #include <unordered_map>
-#include <memory>
 
-#include <boost/graph/graph_traits.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/bellman_ford_shortest_paths.hpp>
 #include <boost/graph/breadth_first_search.hpp>
+#include <boost/graph/graph_traits.hpp>
 
-#include "z3.h"
+#include <z3.h>
 
 #include "common.h"
 #include "reason.h"

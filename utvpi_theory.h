@@ -9,10 +9,10 @@
 #include <cstdint>
 
 #include <gmpxx.h>
-
 #include <z3.h>
 
 #include "reason.h"
+#include "utvpi_theory_data.h"
 
 /*
  * A few helper functions.
@@ -42,6 +42,13 @@ Z3_context MkContext() {
 
   Z3_del_config(cfg);
   return context;
+}
+
+Sign ArgToSign(Z3_ast &minus, Z3_ast &plus, Z3_ast &ast) {
+  if (ast == plus)
+    return Pos;
+  assert(ast == minus);
+  return Neg;
 }
 
 
@@ -133,12 +140,15 @@ void Restart(Z3_theory theory) {
 }
 
 template <template <typename > class Utvpi, typename T>
-Z3_bool SatCheck(Z3_theory theory) {
+Z3_bool SatCheck(Z3_theory theory, bool is_final) {
 
   Z3_context context = Z3_theory_get_context(theory);
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
+
+#ifdef DEBUG
   data->graph.Print();
+#endif
 
   bool sat;
   std::list<ReasonPtr> *cycle;
@@ -151,7 +161,15 @@ Z3_bool SatCheck(Z3_theory theory) {
   std::cout << "SatCheck: UNSAT." << std::endl;
 #endif
 
-  /* There must be at least one edge. */
+  /* Current context is unsatisfiable. If this is the final check just return
+   * UNSAT. */
+
+  if (is_final)
+    return Z3_FALSE;
+
+  /* Otherwise get the explanations and assert it.*/
+
+  /* There must be at least one edge cause the negative cycle. */
   assert(cycle->size() > 0);
 
   Z3_ast conflict = cycle->front()->MkAst(context, data->id_to_ast, data->utvpi,
@@ -177,12 +195,11 @@ Z3_bool SatCheck(Z3_theory theory) {
   return Z3_FALSE;
 }
 
-Sign ArgToSign(Z3_ast &minus, Z3_ast &plus, Z3_ast &ast) {
-  if (ast == plus)
-    return Pos;
-  assert(ast == minus);
-  return Neg;
+template <template <typename > class Utvpi, typename T>
+Z3_bool FinalCheck(Z3_theory theory) {
+  return SatCheck<Utvpi, T>(theory, true);
 }
+
 
 template <template <typename> class Utvpi, typename T>
 Z3_ast SignToArg(UtvpiData<Utvpi, T> *data, Sign sign) {
@@ -236,8 +253,6 @@ void NewAssignment(Z3_theory theory, Z3_ast ast, Z3_bool value) {
             << Z3_ast_to_string(context, ast)
             << " to "
             << static_cast<int>(value)
-            << std::endl
-            << "Updating graph."
             << std::endl;
 #endif
 
@@ -305,6 +320,7 @@ void NewAssignment(Z3_theory theory, Z3_ast ast, Z3_bool value) {
     assert(false);
   }
 
+  SatCheck<Utvpi, T>(theory, false);
 }
 
 
@@ -349,7 +365,7 @@ Z3_theory MkTheory(Z3_context context) {
   Z3_set_new_assignment_callback(theory, NewAssignment<Utvpi, T>);
   Z3_set_push_callback(theory, Push<Utvpi, T>);
   Z3_set_pop_callback(theory, Pop<Utvpi, T>);
-  Z3_set_final_check_callback(theory, SatCheck<Utvpi, T>);
+  Z3_set_final_check_callback(theory, FinalCheck<Utvpi, T>);
   Z3_set_new_eq_callback(theory, NewEquality<Utvpi, T>);
   Z3_set_reset_callback(theory, Reset<Utvpi, T>);
   Z3_set_restart_callback(theory, Restart<Utvpi, T>);
