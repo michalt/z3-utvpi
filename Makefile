@@ -1,5 +1,5 @@
 CC=g++
-CXXFLAGS=-std=c++0x -Wall -DDEBUG=1
+CXXFLAGS=-std=c++0x -Wall -DVERBOSE -DDEBUG
 #-Weffc++
 # LIBS=-lgmpxx -lgmp
 LIBS=-lz3 -fopenmp -lgmpxx -lgmp

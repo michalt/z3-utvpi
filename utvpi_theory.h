@@ -65,7 +65,7 @@ void NewEquality(Z3_theory theory, Z3_ast ast1, Z3_ast ast2) {
 
   Z3_context context = Z3_theory_get_context(theory);
 
-#ifdef DEBUG
+#ifdef VERBOSE
   std::cout << "Z3: NewEquality: "
             << Z3_ast_to_string(context, ast1)
             << " == "
@@ -86,7 +86,11 @@ void NewEquality(Z3_theory theory, Z3_ast ast1, Z3_ast ast2) {
 
 template <template <typename > class Utvpi, typename T>
 void Push(Z3_theory theory) {
+
+#ifdef VERBOSE
   std::cout << "Z3: Push" << std::endl;
+#endif
+
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
   data->graph.Push();
@@ -94,7 +98,11 @@ void Push(Z3_theory theory) {
 
 template <template <typename > class Utvpi, typename T>
 void Pop(Z3_theory theory) {
+
+#ifdef VERBOSE
   std::cout << "Z3: Pop" << std::endl;
+#endif
+
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
   data->graph.Pop();
@@ -102,7 +110,11 @@ void Pop(Z3_theory theory) {
 
 template <template <typename > class Utvpi, typename T>
 void Reset(Z3_theory theory) {
+
+#ifdef VERBOSE
   std::cout << "Z3: Reset" << std::endl;
+#endif
+
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
   data->graph.Reset();
@@ -110,7 +122,11 @@ void Reset(Z3_theory theory) {
 
 template <template <typename > class Utvpi, typename T>
 void Restart(Z3_theory theory) {
+
+#ifdef VERBOSE
   std::cout << "Z3: Restart" << std::endl;
+#endif
+
   UtvpiData<Utvpi, T> *data =
     static_cast<UtvpiData<Utvpi, T>*>(Z3_theory_get_ext_data(theory));
   data->graph.Reset();
@@ -118,10 +134,6 @@ void Restart(Z3_theory theory) {
 
 template <template <typename > class Utvpi, typename T>
 Z3_bool SatCheck(Z3_theory theory) {
-
-#ifdef DEBUG
-  std::cout << "Checking satisfiability..." << std::endl;
-#endif
 
   Z3_context context = Z3_theory_get_context(theory);
   UtvpiData<Utvpi, T> *data =
@@ -135,6 +147,10 @@ Z3_bool SatCheck(Z3_theory theory) {
   if (sat)
     return Z3_TRUE;
 
+#ifdef VERBOSE
+  std::cout << "SatCheck: UNSAT." << std::endl;
+#endif
+
   /* There must be at least one edge. */
   assert(cycle->size() > 0);
 
@@ -144,7 +160,6 @@ Z3_bool SatCheck(Z3_theory theory) {
 
   Z3_ast tmp[2];
   for (auto r : *cycle) {
-    std::cout << *r << std::endl;
     tmp[0] = conflict;
     tmp[1] = r->MkAst(context, data->id_to_ast, data->utvpi, data->svpi,
         data->minus, data->plus);
@@ -153,7 +168,7 @@ Z3_bool SatCheck(Z3_theory theory) {
   }
   conflict = Z3_mk_not(context, conflict);
 
-#ifdef DEBUG
+#ifdef VERBOSE
   std::cout << "SatCheck: asserting theory axiom:" << std::endl;
   std::cout << Z3_ast_to_string(context, conflict) << std::endl;
 #endif
@@ -216,7 +231,7 @@ void NewAssignment(Z3_theory theory, Z3_ast ast, Z3_bool value) {
 
   Z3_context context = Z3_theory_get_context(theory);
 
-#ifdef DEBUG
+#ifdef VERBOSE
   std::cout << "Z3: Assigned "
             << Z3_ast_to_string(context, ast)
             << " to "
@@ -226,9 +241,13 @@ void NewAssignment(Z3_theory theory, Z3_ast ast, Z3_bool value) {
             << std::endl;
 #endif
 
+  /* This is probably a bug. But it's not really clear why and when Z3 would
+   * change assignment to something without Push/Pop.. */
   if (value != Z3_TRUE) {
+#ifdef DEBUG
     std::cout << "NewAssignment: something is not true. Ignoring.."
               << std::endl;
+#endif
     return;
   }
 

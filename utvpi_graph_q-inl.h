@@ -43,14 +43,22 @@ std::pair<bool, std::list<ReasonPtr>*> UtvpiGraphQ<T>::Satisfiable() {
 
   auto neg_cycle = new std::list<ReasonPtr>();
   if (!no_neg_cycle) {
-    std::cout << "Found negative cycle without tightening!" << std::endl;
+
+#ifdef VERBOSE
+    std::cout << "UtvpiGraphQ: Found negative weight cycle." << std::endl;
+#endif
+
     neg_cycle = GetNegativeCycle(*neg_visitor.neg_edge, parent);
     assert(neg_cycle != NULL);
+
+#ifdef DEBUG
     for (auto r : *neg_cycle) {
-      std::cout << "Negative cycle: "
+      std::cout << "Negative weight cycle: "
                 << *r
                 << std::endl;
     }
+#endif
+
     return std::make_pair(false, neg_cycle);
   }
   return std::make_pair(true, neg_cycle);

@@ -76,8 +76,8 @@ class UtvpiGraph {
     void SetEdge(Vertex src, T weight, Vertex trg);
     void RemoveEdge(Vertex src, Vertex trg);
 
-    void AddEdgeRollback(Vertex src, Vertex trg);
-    void AddWeightRollback(Vertex src, T weight, Vertex trg);
+    void AddEdgeRollback(Vertex src, Vertex trg, ReasonPtr reason);
+    void AddWeightRollback(Vertex src, T weight, Vertex trg, ReasonPtr reason);
 
     std::list<ReasonPtr>*
     GetNegativeCycle(const Edge &start_edge, const std::vector<Vertex> &parent);
@@ -108,25 +108,27 @@ class UtvpiGraph {
 
     class EdgeRollback : public Rollback {
       public:
-        EdgeRollback(Vertex s, Vertex t) : s_(s), t_(t) { }
+        EdgeRollback(Vertex s, Vertex t, ReasonPtr r) : s_(s), t_(t), r_(r) { }
         void Execute(UtvpiGraph<T>& graph) {
-          std::cout << "EdgeRollback" << std::endl;
           graph.RemoveEdge(s_, t_);
+          graph.reasons_[std::make_pair(s_, t_)] = r_;
         }
       private:
         Vertex s_, t_;
+        ReasonPtr r_;
     };
 
     class WeightRollback : public Rollback {
       public:
-        WeightRollback(Vertex s, T w, Vertex t) : s_(s), t_(t), w_(w) { }
+        WeightRollback(Vertex s, T w, Vertex t, ReasonPtr r) : s_(s), t_(t), w_(w), r_(r) { }
         void Execute(UtvpiGraph<T>& graph) {
-          std::cout << "WeightRollback" << std::endl;
           graph.SetEdge(s_, w_, t_);
+          graph.reasons_[std::make_pair(s_, t_)] = r_;
         }
       private:
         Vertex s_, t_;
         T w_;
+        ReasonPtr r_;
     };
 
 

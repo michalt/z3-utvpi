@@ -50,14 +50,23 @@ UtvpiGraphZ<T>::Satisfiable() {
 
   auto neg_cycle = new std::list<ReasonPtr>();
   if (!no_neg_cycle) {
-    std::cout << "Found negative cycle without tightening!" << std::endl;
+
+#ifdef VERBOSE
+    std::cout << "UtvpiGraphZ: Found negative weight cycle without tightening."
+              << std::endl;
+#endif
+
     neg_cycle = GetNegativeCycle(*neg_visitor.neg_edge, parent);
     assert(neg_cycle != NULL);
+
+#ifdef DEBUG
     for (auto r : *neg_cycle) {
-      std::cout << "Negative cycle: "
+      std::cout << "Negative weight cycle: "
                 << *r
                 << std::endl;
     }
+#endif
+
     return std::make_pair(false, neg_cycle);
   }
 
@@ -163,7 +172,11 @@ UtvpiGraphZ<T>::Satisfiable() {
 
     if (component[tmp_vertex] == component[tmp_neg_vertex]
         && (distance[vertex] - distance[neg_vertex]) % 2 != 0) {
+
+#ifdef VERBOSE
       std::cout << "Found negative cycle by tightening!" << std::endl;
+#endif
+
       neg_cycle = GetNegativeCycle(tmp_vertex, tmp_neg_vertex, tmp_graph,
           tmp_reasons);
       return std::make_pair(false, neg_cycle);
