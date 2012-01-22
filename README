@@ -1,0 +1,3 @@
+Simple UTVPI (Unit Two Variable Per Inequality) theory solver for Z3. Based on
+the paper "An Efficient Decision Procedure for UTVPI Constraints" by Lahiri and
+Musuvathi.
