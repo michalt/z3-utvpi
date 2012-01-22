@@ -5,7 +5,6 @@
 #include <gmpxx.h>
 
 #include "common.h"
-#include "utvpi_theory_data.h"
 
 /*
  * We can create a numeral in Z3 in a number of ways. This allows us to make the

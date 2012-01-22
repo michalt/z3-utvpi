@@ -12,7 +12,6 @@
 #include <z3.h>
 
 #include "reason.h"
-#include "utvpi_theory_data.h"
 
 /*
  * A few helper functions.
@@ -65,7 +64,20 @@ static const char        *sign_name   = "Sign";
 static const char        *minus_name  = "Minus";
 static const char        *plus_name   = "Plus";
 
-
+/*
+ * Stores all the necessary data for the theory. Note that predicate, minus and
+ * plus should really be constants, however, this seems problematic. To create
+ * them using Z3 API we need to create UtvpiData object first, but that would
+ * require creating the predicate, minus and plus...
+ */
+template <template <typename> class Utvpi, typename T>
+struct UtvpiData {
+  UtvpiData() : utvpi(), svpi(), minus(), plus(), id_to_ast(), graph() { }
+  Z3_func_decl utvpi, svpi;
+  Z3_ast minus, plus;
+  std::unordered_map<VarId, Z3_ast> id_to_ast;
+  Utvpi<T> graph;
+};
 
 template <template <typename > class Utvpi, typename T>
 void NewEquality(Z3_theory theory, Z3_ast ast1, Z3_ast ast2) {
