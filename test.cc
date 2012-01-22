@@ -1,9 +1,6 @@
 #include <iostream>
 #include <cstdlib>
 
-// #include <boost/graph/adjacency_list.hpp>
-// #include <boost/graph/bellman_ford_shortest_paths.hpp>
-// #include <boost/graph/breadth_first_search.hpp>
 #include <boost/graph/graph_traits.hpp>
 
 #include <gmpxx.h>
@@ -43,13 +40,13 @@ void ParseAndRun(const char *file) {
 
   switch (Z3_check(context)) {
     case Z3_L_FALSE:
-      std::cout << "UNSAT" << std::endl;
+      std::cout << "Z3: UNSAT" << std::endl;
       break;
     case Z3_L_UNDEF:
-      std::cout << "UNKNOWN" << std::endl;
+      std::cout << "Z3: UNKNOWN" << std::endl;
       break;
     case Z3_L_TRUE:
-      std::cout << "SAT" << std::endl;
+      std::cout << "Z3: SAT" << std::endl;
       break;
   }
 

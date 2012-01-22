@@ -256,8 +256,6 @@ void NewAssignment(Z3_theory theory, Z3_ast ast, Z3_bool value) {
             << std::endl;
 #endif
 
-  /* This is probably a bug. But it's not really clear why and when Z3 would
-   * change assignment to something without Push/Pop.. */
   if (value != Z3_TRUE) {
 #ifdef DEBUG
     std::cout << "NewAssignment: something is not true. Ignoring.."
