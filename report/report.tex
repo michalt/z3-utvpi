@@ -1,0 +1,141 @@
+\documentclass[a4paper,10pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[pdftex]{hyperref}
+\usepackage[pdftex]{graphicx}
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{enumerate}
+\usepackage{color}
+\usepackage{verbatim}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows}
+
+\tikzstyle{circ} = [ circle, draw, minimum height=2em ]
+\tikzstyle{line} = [draw, -latex']
+\tikzstyle{none} = []
+
+\lstset{ %
+  language=C++,
+  basicstyle=\footnotesize,
+  numbers=left,
+  numberstyle=\footnotesize,
+  stepnumber=1,
+}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\Domain}{\mathbb{D}}
+\newcommand{\Integers}{\mathbb{Z}}
+\newcommand{\Rationals}{\mathbb{Q}}
+\newcommand{\Reals}{\mathbb{R}}
+\newcommand{\BigO}{\mathcal{O}}
+
+\begin{document}
+
+\pagestyle{headings}
+
+\title{Advanced Analysis Techniques \\ SMT Solvers}
+\author{Micha\l\ Terepeta}
+
+\date{January, 2012}
+
+\maketitle
+
+{\abstract The aim of this report is to provide a brief survey of current
+approaches to satisfiability of Difference Logic (DL) and Unit Two Variable Per
+Inequality (UTVPI) constraints. First the report covers DL with the basic
+algorithms and complexity results, then goes on to describe the UTVPI case with
+recent algorithms. In both cases satisfiability as well as equality generation
+is covered. Furthermore the report is accompanied by a proof-of-concept
+implementation of UTVPI theory solver for the Z3 SMT.}
+
+
+\tableofcontents
+
+\newpage
+\section{Introduction}
+
+In many software verification projects, it is necessary to check for
+satisfiability of certain constraints. However, propositional satisfiability,
+is often unsuitable for direct use in cases that involve e.g. arithmetic
+constraints. This is one of the reasons for growing interest in SMT
+(Satisfiability Modulo Theories). SMT solvers provide a much richer
+language (or actually languages) that one can use to communicate the
+constraints. The commonly available theories include free/uninterpreted
+functions, equality, arrays, difference constraints, linear arithmetic, etc.
+
+Many of these theories naturally arise in software verification, however, they
+rarely occur just by themselves --- more often the constraints are defined over a
+combination of various theories. This leads us to one of the main achievements
+in SMT --- the Nelson-Oppen framework \cite{bib:nelson_oppen} that specifies how
+one can combine various theories and still get a decidable algorithm for
+satisfiability. Therefore modern SMT solvers are capable of solving the problem
+of satisfiability of constraints over many different theories. This is one of
+the reasons of why more and more static analyzers/software model checkers use
+SMT solvers to prove (or disprove) various properties about analyzed software.
+
+Finally there is, as always in case of software verification, the question of
+performance. Today's SMT solvers use many very specialized algorithms for
+various theories. As an example consider the fact that many SMT solvers have a
+separate engine for linear arithmetic and for difference logic (even though
+difference logic is a special case of linear arithmetic). The reason for that is
+simple --- one of the best algorithms for linear real arithmetic called Simplex
+is exponential in the worst case, whereas the problem of satisfiability of
+linear integer arithmetic is NP-complete. On the other hand, difference
+constraints can be solved by using very efficient graph-based algorithms in
+polynomial time. Therefore specialization can often be quite beneficial. This
+report is exactly about exploring a specialized solver for UTVPI constraints,
+which are a slightly more expressive fragment of linear arithmetic yet still
+allows efficient polynomial satisfiability algorithms.
+
+%
+% Difference Logic
+%
+
+\newpage
+\section{Difference Logic}
+\input{dl}
+
+
+%
+% UTVPI
+%
+
+\newpage
+\section{UTVPI}
+\input{utvpi}
+
+\newpage
+\section{Implementation}
+\input{impl}
+
+%
+% Conclusions
+%
+
+\newpage
+\section{Conclusions}
+
+Both Difference Logic and UTVPI seem to be a great compromise for satisfiability
+checking in the context of modern SMT solvers. They both allow very efficient
+graph-based algorithms for problems such as satisfiability or equality
+generation. And at the same time they often naturally arise in software
+verification (array bounds checking, etc.) or in other problems like job
+scheduling.
+
+This report provided a brief survey of the current state-of-the-art in the
+satisfiability checking for Difference Logic and UTVPI. It focused on providing
+intuition about various algorithms and reasons of their efficiency. Apart from
+that a proof-of-concept implementation of UTVPI theory solver for the Z3 SMT
+solver has been developed.
+
+
+\bibliographystyle{plain}
+\bibliography{report}
+
+\end{document}

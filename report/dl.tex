@@ -1,0 +1,198 @@
+\subsection{Introduction}
+
+Difference constraints have the form
+\[
+x - y \leq c
+\]
+where $c \in \Rationals$ or $c \in \Integers$. We will denote the set of
+constraints as $\phi$. Note that since $\leq$ is anti-symmetric, one can express
+equality $x - y = c$ as two inequalities: $x - y \leq c$ and $c \leq x - y$,
+where the latter is equivalent to $y -x \leq -c$. Difference Logic is quite
+interesting from the point of view of SMT solver because constraints of that
+form arise quite naturally in many situations and quite a few problems can be
+encoded using them. Examples include arrays bound checking or job scheduling.
+Furthermore, there are well-known and efficient algorithms that can check
+satisfiability of such constraints in polynomial time. The current approach to
+this problem is based on transforming the constraints into graph representation,
+such that for every constraint of the form $x - y \leq c$ we have an edge $y
+\rightarrow x$ with weight $c$. We will denote such a graph as $G_\phi$. The key
+result that allows efficient decision procedures is that the constraints are not
+satisfiable if and only if there is a negative cycle in such a graph
+\cite{bib:algorithms}.
+
+
+\subsection{Algorithms}
+
+The basic algorithm used for satisfiability checking, in the context of SMT
+solvers, is presented in \cite{bib:ms_dl}. As already mentioned, the problem is
+reduced to determining whether there is a negative cycle in the graph
+representing the constraint. The intuition behind this approach is as follows.
+Let us have a cycle
+$x \xrightarrow{c_1} \ldots \xrightarrow{c_n} x$ such that
+$c_1 + \ldots + c_n < 0$. If we convert it back to the form of inequalities we
+would arrive at:
+\begin{align*}
+& x - y_1 \leq c_1 \\
+& y_1 - y_2 \leq c_2 \\
+& \ldots \\
+& y_{n-1} - x \leq c_n
+\end{align*}
+Now adding all the inequalities by sides will result in
+\[
+x - x \leq c_1 + \ldots + c_n \\
+\]
+since the intermediate variables cancel out. Simplifying we get
+\[
+0 \leq c_1 + \ldots + c_n < 0 \\
+\]
+which is clearly a contradiction, indicating that the constraints are not
+satisfiable.
+
+The usual approach to check if there is a negative cycle in the graph is to run
+the Bellman-Ford algorithm on the graph. For reference the algorithm is
+presented in Table \ref{tab:bellman_ford}. Since the algorithm is an SSSP
+algorithm (Single-Source Shortest Paths) the first step is to add a new vertex
+$v_s$ and for every other vertex $v$ in the graph an edge $v_s \rightarrow v$
+with weight equal to zero. This can not introduce new negative cycles and simply
+makes it possible to detect negative cycles using Bellman-Ford algorithm even if
+the graph consists of a few disconnected subgraphs. The time complexity of the
+algorithm is $\BigO(|V| |E|)$, where $V$ is the set of vertices and
+$E$ the set of edges. However, here we will use $n$ to denote the number of
+variables and $m$ for the number of constraints, therefore the satisfiability
+check of a set of constraints can be performed in $\BigO((m + n) n)$ time
+(the additional $n$ comes from the added edges with source in $v_s$, by
+modifying the algorithm it is possible to achieve $\BigO(m n)$).
+Moreover, note that once the Bellman-Ford algorithm returned true, the $\delta$
+mapping gives us a potential solution to the set of constraints.
+
+\begin{table}
+\caption{The Bellman-Ford algorithm}
+\label{tab:bellman_ford}
+\textbf{Input:} source vertex $s$
+
+\textbf{Output:} $\delta$ (maps each vertex to its shortest distance from the
+  source vertex) and $p$ (parent pointer --- maps each vertex to its parent in
+  the shortest path tree rooted in $s$)
+
+\begin{enumerate}
+\item Set $\delta(s) \leftarrow 0$, and
+  for every $v \in V \setminus \{ s \}$ set $\delta(v) \leftarrow \infty$.
+  For every $v \in V$ set $p(v) \leftarrow nil$.
+%
+\item For $i = 1$ to $|V| -1$ do
+  \begin{enumerate}
+  \item For each edge $(u, v) \in E$, if $\delta(v) > \delta(u) + w(u, v)$ then
+    \begin{itemize}
+    \item Set $\delta(v) \leftarrow \delta(u) + w(u, v)$
+    \item Set $p(v) \leftarrow u$
+    \end{itemize}
+  \end{enumerate}
+%
+\item For each edge $(u, v) \in E$, if $\delta(v) > \delta(u) + w(u, v)$ then
+  return false.
+%
+\item Return true.
+\end{enumerate}
+\end{table}
+
+Once we discovered that there is a negative cycle in the graph, it is often
+useful (e.g. to generate theory conflicts) to find the edges that cause it. This
+can be achieved by using the parent pointers returned by the Bellman-Ford
+algorithm. If we assume that in the second step of the algorithm it was vertex
+$v$ such that $\delta(v) > \delta(u) + w(u, v)$
+then we can use the pointers to go back in the path. There must be some vertex
+that will be twice in the list and forms a negative weight cycle.
+
+Finally it is useful to notice that for the above outlined procedures, it does
+not really matter whether the domain is $\Rationals$ or $\Integers$.
+
+\subsection{SVPI}
+
+In the above description we have considered only constraints of the form
+$x - y \leq c$ but it is easy to relax this requirement a bit and also allow
+$x \leq c$ (i.e. SVPI --- Single Variable Per Inequality). This can be done
+quite easily by simply creating a fresh vertex $v_0$ and treating rewriting all
+such constraints as $x - v_0 \leq c$. The above algorithm for satisfiability
+checking will then work as expected. The only other thing to remember is that
+$\delta$ returned by Bellman-Ford algorithm might have to be shifted in order to
+get that $\delta(v_0) = 0$. This relies on the property that for any solution
+$\delta$ to the difference constraints $\delta'(v) = \delta(v) + k$ is also a
+solution (for every $k$). Intuitively, since we are only interested in the
+differences between the variables, we can always "shift" the solution.
+
+\subsection{Strict inequalities}
+
+So far we have limited ourselves only to non-strict inequalities and have not
+considered strict ones (i.e. $<$ instead of $\leq$) . However, the problem with
+strict inequalities can be reduced into one with non-strict ones. In case of
+$\Integers$ this is quite trivial ($x - y < 5$ is equivalent to $x - y \leq 4$).
+
+But it is also possible for $\Rationals$ as presented in
+\cite{bib:arithmetic_dpllt}. The solution is to use infinitesimal value
+$\epsilon$ and transform the strict inequalities to the non-strict ones. For
+instance consider $x - y < c$, we can just rewrite that as $x - y \leq c -
+\epsilon$. The only necessary change is to slightly modify our domain (constants
+and variable assignments). We need to define $\Rationals_\epsilon$ to be pairs of
+rationals such that $(c, k)$ denotes $c + k \delta$. Finally we need to define a
+few operations for $\Rationals_\epsilon$:
+\begin{align*}
+(c_1, k_1) + (c_2, k_2) & \equiv (c_1 + c_2, k_1 + k_2) \\
+a \times (c, k) & \equiv (a \times c, a \times k) \\
+(c_1, k_1) \leq (c_2, k_2) & \equiv (c_1 \leq c_2) \vee
+                                    (c_1 = c_2 \land k_1 \leq k_2) \\
+\end{align*}
+Note that the last line above defines nothing else than standard lexicographical
+ordering.
+
+
+\subsection{Beyond satisfiability}
+
+There are some possible improvements to the above procedure. One of them is to
+use a different algorithm for detecting the negative cycle. There have been some
+newer algorithms with slightly better performance than the Bellman-Ford
+algorithm, see \cite{bib:negative_cycles} for a survey. For instance
+\cite{bib:dl_propagation} uses an algorithm based on
+\cite{bib:dynamic_negative_cycle}. Unfortunately since the experiments were
+focused on theory propagation, it is hard to say how much this aspect can
+influence the overall performance.
+
+\begin{table}[b]
+\caption{Algorithm for equality generation}
+\label{tab:eq_gen}
+\begin{enumerate}
+\item Let $E'$ be the set ef edges in the graph such that $e \in E'$ if and only
+  if $sl(e) = 0$
+\item Create an induced subgraph $G'_\phi(V, E')$ from $G'_\phi(V, E)$.
+\item Calculate strongly connected components (SCC) \cite{bib:tarjan_dfs} of the
+  graph.
+\item For each SCC S, let $V_d^s = \{ x \mid x \in S, \delta(x) = d \}$.
+\item For each $V_d^s = \{ x_1, \ldots, x_k \}$ we have the equalities
+  $x_1 = x_2 = \ldots = x_k$.
+\end{enumerate}
+\end{table}
+
+Apart from that, as already mentioned, SMT solvers rarely work with constraints
+of just one type and often employ a combination of various theories in the
+Nelson-Oppen framework \cite{bib:nelson_oppen}. However, one of the requirements
+of this framework is that all the theory solvers must share the implied
+equalities. Therefore it is important to have an efficient algorithm also for
+generating equalities that are implied by the given set of difference
+constraints. Here we will briefly cover the one presented in \cite{bib:ms_dl}.
+Of course we assume here that the set of constraint is satisfiable (i.e.
+Bellman-Ford algorithm returned true for the generated graph). A naive way to
+generate all the equalities is to perform the transitive closure of all the
+constraints and check if we can find $x \leq y$ and $y \leq x$ for some $x$ and
+$y$. However, this is quite expensive --- in the worst case would require
+$\BigO(n^3)$. A more efficient algorithm is presented in Table \ref{tab:eq_gen}.
+However, before we discuss it we need to introduce the concept of slack, i.e.
+for every edge $(u, v)$ its slack is defined as
+\[
+sl(u, v) = \delta(v) - \delta(u) + w(u, v)
+\]
+
+The algorithm is based on the idea that if we consider only the edges have slack
+equal to zero then any cycle formed by these edges will have weight equal to
+zero. So when we have two vertices $u$ and $v$ in the same SCC (i.e. there is a
+path from $u$ to $v$ and the other way around) and they have the same value
+associated by $\delta$ then we have that the weight of both paths is equal to
+zero. Which corresponds to $v - u \leq 0$ and $u - v \leq 0$, i.e. $u = v$.

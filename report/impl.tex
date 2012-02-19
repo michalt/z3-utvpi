@@ -1,0 +1,127 @@
+\subsection{Introduction}
+
+The accompanying UTPVI theory solver for Z3 SMT Solver \cite{bib:z3} is
+implemented in around 1500 lines of C++ (taking advantage of recent C++11
+standard \cite{bib:cc11}). It uses Boost Graph Library
+\cite{bib:boost,bib:boost_graph} for graph manipulation and GMP \cite{bib:gmp}
+for arbitrary precision arithmetic. Due to time constraints it is mainly a
+proof-of-concept and does not have all the features necessary for usage in a
+combination with other theories. Currently it implements:
+\begin{itemize}
+\item decision procedure for UTVPI (and thus SVPI) for integers, both using
+  basic types of C++ like int, as well as arbitrary precision integers from GMP
+  library
+\item decision procedure for UTVPI (and thus SVPI) for rationals using arbitrary
+  precision rationals from GMP library\footnote{In fact current implementation
+  should work with basic types like \texttt{float} or \texttt{double}, however,
+  due to their imprecision, this would probably not be very useful.}
+\item generation of theory conflicts
+\item backtracking
+\item integration with Z3
+\end{itemize}
+Initially the implementation was to be based on the one for Fx7 SMT solver
+\cite{bib:fx7}. However, it implements an older algorithm described in
+\cite{bib:harvey_stuckey}. Therefore this implementation is not based on the
+procedure from Fx7 and implements the more recent algorithms from
+\cite{bib:ms_utvpi} instead.
+
+One of the main highlights of this implementation is the ability to easily
+instantiate solvers for rationals/integers with various representations. For
+instance the following snippet creates theories for checking satisfiability for
+integers that fit in \texttt{int}, integers of arbitrary precision and rationals
+of arbitrary precision respectively.
+\begin{lstlisting}
+Z3_theory mach_integers  = MkTheory<UtvpiGraphZ, int>(context);
+Z3_theory arbt_integers  = MkTheory<UtvpiGraphZ, mpz_class>(context);
+Z3_theory arbt_rationals = MkTheory<UtvpiGraphQ, mpq_class>(context);
+\end{lstlisting}
+Where \texttt{context} is \texttt{Z3\_context}, \texttt{mpz\_class} and
+\texttt{mpq\_class} are GMP's classes for arbitrary precision integers and
+rationals respectively\footnote{GMP offers both a basic C as well as somewhat
+more convenient C++ interface, which overloads basic arithmetic operators.}. Note
+that this includes running all the described graph algorithms with weights of
+the specified types, as well as using the appropriate functions from Z3 to parse
+and create numerals (in case of \texttt{int} we use
+\texttt{Z3\_get\_numeral\_int}, in case of \texttt{mpz\_class} we need to
+go through a string and use
+use \texttt{Z3\_get\_numeral\_string}).
+
+The project uses Z3 parser and predefines two predicates \texttt{Utvpi} and
+\texttt{Svpi} and introduces additional sort \texttt{Sign} with two constants
+\texttt{Minus} and \texttt{Plus} that can be used as follows:
+\begin{verbatim}
+(declare-fun x () Int)
+(declare-fun y () Int)
+
+(assert (or (Utvpi Plus x Minus y (~ 1)) (Utvpi Plus x Minus y 1)))
+(assert (Svpi Plus y 0))
+(assert (Svpi Minus x (~ 1)))
+\end{verbatim}
+This translates to
+\[
+(x - y \leq -1 \vee x - y \leq 1 )
+\land
+y \leq 0
+\land
+- x \leq -1
+\]
+Of course this can be easily changed as desired.
+
+The tool also outputs some information on how it is solving the problem. For the
+above example the output is:
+\begin{verbatim}
+Parsing file: test.smt
+Parsed the following formula:
+(and (or (Utvpi Plus x Minus y (- 1)) (Utvpi Plus x Minus y 1))
+     (Svpi Plus y 0)
+     (Svpi Minus x (- 1)))
+Z3: Assigned (Svpi Plus y 0) to 1
+Z3: Assigned (Svpi Minus x -1) to 1
+Z3: Push
+Z3: Assigned (Utvpi Plus x Minus y -1) to 1
+UtvpiGraphZ: Found negative weight cycle without tightening.
+UtvpiGraph: Reason for negative cycle:
+[..]
+SatCheck: UNSAT.
+SatCheck: asserting theory axiom:
+(not (and (and (and (Svpi Minus x -1) (Utvpi Plus x Minus y -1))
+               (Svpi Plus y 0))
+          (Utvpi Plus x Minus y -1)))
+Z3: Pop
+Z3: Assigned (Utvpi Plus x Minus y 1) to 1
+Z3: SAT
+Z3: Reset
+\end{verbatim}
+Which clearly shows how everything works:
+\begin{enumerate}
+\item First Z3 assigns the two \texttt{SVPI} predicates the value true (they
+  are asserted so they must be true for the formula to by satisfiable).
+\item Then Z3 makes \texttt{Push} callback for the case-split caused by the
+  asserted disjunction.
+\item Assigning true for the first disjuncts causes a theory conflict from the
+  UTVPI solver (clearly $y \leq 0 \land x \geq 1 \land x - y \leq -1$ is
+  unsatisfiable).
+\item Z3 reacts making the \texttt{Pop} callback and assigning true to the other
+  disjunct.
+\item Theory solver returns that this is satisfiable.
+\item Thus the formula is satisfiable.
+\end{enumerate}
+Of course if we modify the formula removing the second disjunct, the result is:
+\begin{verbatim}
+Parsing file: test.smt
+Parsed the following formula:
+(and (Utvpi Plus x Minus y (- 1)) (Svpi Plus y 0) (Svpi Minus x (- 1)))
+Z3: Assigned (Utvpi Plus x Minus y -1) to 1
+Z3: Assigned (Svpi Plus y 0) to 1
+Z3: Assigned (Svpi Minus x -1) to 1
+UtvpiGraphZ: Found negative weight cycle without tightening.
+UtvpiGraph: Reason for negative cycle:
+[..]
+SatCheck: UNSAT.
+SatCheck: asserting theory axiom:
+(not (and (and (and (Utvpi Plus x Minus y -1) (Svpi Plus y 0))
+               (Utvpi Plus x Minus y -1))
+          (Svpi Minus x -1)))
+Z3: UNSAT
+Z3: Reset
+\end{verbatim}

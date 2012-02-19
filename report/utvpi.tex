@@ -1,0 +1,276 @@
+\subsection{Introduction and comparison with DL}
+
+UTVPI stands for Unit Two Variable Per Inequality and is also referred to as
+Octagons \cite{bib:octagons}. Here we will be interested mostly in the question
+of satisfiability of a set of constraints and not in the details of the
+constraints as an abstract domain. In general the UTVPI constraints are of the
+form
+\[
+a x + b y \leq c
+\]
+where $a, b \in \{ -1, 0, 1 \}$ and $c$ is either $\Rationals$ or $\Integers$.
+UTVPI constraints are quite interesting because they are a bit more expressive
+than difference logic and so allow more problems to be encoded, yet there still
+exist efficient polynomial decision procedures for them. Furthermore in case of
+$\Integers$ relaxing any requirement of the UTVPI (allowing non-unit
+coefficients or more variables) leads to NP-complete decision procedures.
+
+The first decision procedure for UTVPI was presented in \cite{bib:beyond_finite}
+and showed that transitive closure of the set of constraints with respect to the
+transitive and in case of $\Integers$ also tightening rules (Table
+\ref{tab:inference}) is unsatisfiable if and only if it contains a
+contradiction, like $0 \leq d$ where $d < 0$.
+
+Note the importance of the tightening rule for $\Integers$. The additional
+difficulty of $\Integers$ constraints is that they can have solutions that are
+not in $\Integers$. So they might be satisfiable in $\Rationals$ but not in
+$\Integers$. The tightening rule basically provides additional information that
+if we have a constraint that is equivalent to $2x \leq d$ and $d$ is odd then
+we can tighten the bound on $x$ (i.e. we have $2x \leq d - 1$).
+
+\begin{table}[b]
+\caption{Inference rules for UTVPI}
+\label{tab:inference}
+\centering
+\begin{align}
+& \frac{ ax + by \leq c  \qquad  -ax + b'z \leq d }
+     { by +b'z \leq c + d}
+\tag{Transitive} \\
+& \notag \\
+& \frac{ ax + by \leq c  \qquad  ax - by \leq d }
+     { ax \leq \lfloor (c + d) / 2 \rfloor }
+\tag{Tightening}
+\end{align}
+\end{table}
+%
+Also note that we will not consider here the case of strict inequalities ---
+they can be handled as in case of DL. Instead we will focus more on the case
+when the domain is $\Integers$, because for UTVPI this case is actually
+more difficult than the one with $\Rationals$.
+
+\subsection{Algorithms}
+
+The procedure presented in \cite{bib:beyond_finite} has been improved by
+\cite{bib:harvey_stuckey} but the worst case time complexity remained the same
+--- $\BigO(m n^2)$. However, a new approach was proposed in \cite{bib:ms_utvpi}
+which does not involve the transitive closure and uses a graph representation of
+the constraints to solve satisfiability (note the similarity to the difference
+logic). The complexity of the procedure is equal to the complexity of negative
+cycle detection algorithm. So using Bellman-Ford algorithm it is possible to
+achieve $\BigO(m n)$. One of the main ideas behind the approach is to construct
+a graph with two vertices for each variable.
+
+For every variable $x$ in the set of constraints we have two vertices $x^-$ and
+$x^+$ that represent $-x$ and $x$. We will sometimes use $-v$ to denote $x^-$ if
+$v$ represents $x^+$ and the other way around. Now for every constraint we add
+one or two edges, as presented in the Table \ref{tab:utvpi_edges}.
+
+\begin{table}
+\caption{Edges in the UTVPI graph}
+\label{tab:utvpi_edges}
+\[
+\begin{array}{c|c|c}
+\textrm{UTVPI constraint} & \textrm{DL constraints} & \textrm{Graph Edges} \\
+\hline \hline
+x - y \leq c &
+  x^+ - y^+ \leq c        \qquad y^- - x^- \leq c &
+  y^+ \xrightarrow{c} x^+ \qquad x^- \xrightarrow{c} y^- \\
+\hline
+x + y \leq c &
+  x^+ - y^- \leq c        \qquad y^+ - x^- \leq c &
+  y^- \xrightarrow{c} x^+ \qquad x^- \xrightarrow{c} y^+ \\
+\hline
+- x - y \leq c &
+  x^- - y^+ \leq c        \qquad y^- - x^+ \leq c &
+  y^+ \xrightarrow{c} x^- \qquad x^+ \xrightarrow{c} y^- \\
+\hline
+x \leq c &
+  x^+ - x^- \leq c &
+  x^- \xrightarrow{2c} x^+ \\
+\hline
+-x \leq c &
+  x^- - x^+ \leq c &
+  x^+ \xrightarrow{2c} x^- \\
+\end{array}
+\]
+\end{table}
+
+There are a few interesting properties of such a graph. First of all the graph
+is very similar to the one from decision procedure for DL. Yet it does not need
+a special vertex $v_0$ that was is needed it in the constraint graphs for
+difference logic to handle constraints of the from $x \leq c$. Another important
+observation about this new graph is that whenever there is an edge $(u, v)$
+there also is an edge $(-v, -u)$. Moreover this can be extended to paths ---
+whenever we have a path from $u$ to $v$, there is a path from $-v$ to $-u$.
+Apart from that, let $\delta$ be a valuation of all the vertices (i.e. a possible
+solution to the constraints), then whenever we have a shortest path $SP(u, v)$ between
+two vertices $u$ and $v$, we know that $\delta(v) - \delta(u) \leq wSP(u,
+v)$ (where $wSP$ stands for $w \circ SP$, that is the weight of the shortest
+path). Finally, one of the main result with respect to UTVPI/Octagons is the
+following \cite{bib:octagons}.
+%
+\begin{lemma}
+A set of UTVPI constraints is unsatisfiable in $\Rationals$ if and only if the
+corresponding constraint graph contains a negative weight cycle.
+\end{lemma}
+%
+Note that this is only true for $\Rationals$ and not for $\Integers$. As already
+mentioned constraints over integers pose additional difficulties since they can
+have a non-integer solutions. Therefore for the case of integers we need to
+introduce the concept of tightening edges. They are defined as follows:
+\[
+T = \{ (u, -u) \mid wSP(u, -u) \text{ is odd} \}
+\]
+Note that this corresponds to an either $u^+ - u^- \leq c$ or $u^- - u^+ \leq
+c$, where $c$ is odd. We are interested only in those edges because these are the
+only ones that can cause the Tightening rule to apply. Therefore for each edge
+in $T$ we define its weight as follows
+\[
+w_T(u, -u) = wSP(u, -u) - 1
+\]
+Let us denote the graph with those additional edges as $G_{\phi \cup T}$. One of
+the main contributions of \cite{bib:ms_utvpi} is the lemma below.
+\begin{lemma}
+A set of UTVPI constraint $\phi$ is unsatisfiable in $\Integers$ if and only if
+the graph $G_{\phi \cup T}$ has a negative weight cycle.
+\end{lemma}
+The na\"{i}ve approach would be to actually find and add all the additional
+edges and run the negative cycle detection algorithm on this new graph. This
+could be achieved by using either Floyd-Warshall or Johnson's All Pairs Shortest
+Paths algorithms to find the tightening edges and then use negative cycle
+detection algorithm. However, \cite{bib:ms_utvpi} presents a bit smarter
+approach. It is summarized in Tabel \ref{tab:utvpi_sat}.
+
+\begin{table}
+\caption{Algorithm for satisfiability of UTVPI constraints}
+\label{tab:utvpi_sat}
+\begin{enumerate}
+\item Construct $G_\phi$ graph.
+\item Run a negative cycle detection algorithm on the graph.
+  \begin{enumerate}
+  \item If there is a negative cycle, return UNSAT.
+  \item Otherwise the algorithm will return shortest paths from the source
+    vertex $v_s$ to all other vertices. This can be treated as a feasible solution
+    to the constraints. Note that $\delta(v) - \delta(u) \leq w(u, v)$ for all
+    edges $(u, v)$.
+  \item Let $E'$ be the set of edges from $G$ such that $(u, v) \in E'$ iff
+    $\delta(u) - \delta(v) = w(u, v)$.
+  \item Create graph $G'_\phi$ induced by $E'$
+  \item Group the vertices into strongly connected components (for instance
+    using Tarjan's algorithm \cite{bib:tarjan_dfs}, which is
+    $\BigO(|V| + |E|)$).
+  \item For each vertex $u \in V$, if $-u$ is in the same SCC as $u$ and
+    $\delta(u) - \delta(-u)$ is odd then return UNSAT.
+  \item Return SAT.
+  \end{enumerate}
+\end{enumerate}
+\end{table}
+The intuition behind the second part of the algorithm (i.e. SCC computation) is
+to identify zero weight cycles and check if we can tighten some edge. If so then
+the zero cycle in $G_\phi$ will result in a negative one in $G_{\phi \cup T}$ (i.e.
+after adding the tightening edge). Moreover whenever there is a path $P$ between
+$u$ and $v$ such that all the edges along the path have slack equal to zero,
+then $wSP(u, v) = \delta(v) - \delta(u)$. Now if $u$ and $-u$ are in the same
+SCC, then there is a path from $u$ to $-u$ and from $-u$ to $u$.
+Moreover
+\begin{align*}
+\delta(u) - \delta(-u) & = wSP(-u, u) \\
+\delta(-u) - \delta(u) & = wSP(u, -u) \\
+0 & = wSP(-u, u) + wSP(u, -u) \\
+\end{align*}
+So $u$ and $-u$ form a zero weight cycle. If one of the paths is odd, then we
+know that a corresponding tightening edge will be in $T$ and so from a negative
+cycle. For more precise description and the formal soundness and completeness
+proofs we refer to \cite{bib:ms_utvpi}.
+
+The solver to be useful in DPLL(T) should produce theory conflicts, in this case
+which inequalities cause a negative cycle. Then the solver can assert the theory
+axiom saying that at least one of those equalities must be false. In order to
+find the inequalities, we must track the reason why a given edge was added to
+the graph. Then once we detect a negative cycle using e.g. Bellman-Ford
+algorithm we can simply use the parent pointers to find the cycle. If the
+unsatisfiability was detected in the second part of the algorithm, then all we
+need to do is to find the path from $u$ to $-u$ and back in the induced graph
+(this can be done by Breadth First Search) --- again the cycle is a proof that
+there are no solutions in $\Integers$.
+
+Finally, as in the case of DL, in order for the theory solver to be used in the
+DPLL(T) framework, should be capable of generating all equalities that are
+consequences of the considered inequalities. We will cover here two possible
+approaches, as introduced in \cite{bib:ms_utvpi}. The first, quite simple way of
+generating all inequalities is presented in Table~\ref{tab:naive_eq}. The idea
+behind the algorithm is pretty much the same as for the one for difference
+logic. That is if we know that
+$\delta_{\phi \cup T}(x^+) = \delta_{\phi \cup T}(y^+)$
+and both vertices are in a cycle of weight zero, then they are equal.
+
+\begin{table}
+\caption{Simple algorithm for equality generation}
+\label{tab:naive_eq}
+\begin{enumerate}
+\item Construct $G_{\phi \cup T}$ graph and run a negative cycle detection
+  algorithm to calculate a feasible solution $\delta_{\phi \cup T}$.
+\item Let $E_0$ be a set of edges such that $e \in E_0$ iff $sl(e) = 0$.
+\item Create the subgraph $G_0$ induced by the $E_0$ set and group the vertices
+  into SCCs.
+\item If vertices $x^+$ and $y^+$ are in the same SCC and
+  $\delta_{\phi \cup T}(x^+) = \delta_{\phi \cup T}(y^+)$, then report that
+  $x = y$.
+\end{enumerate}
+\end{table}
+
+\begin{table}
+\caption{Improved algorithm for equality generation}
+\label{tab:fast_eq}
+\begin{enumerate}
+\item Construct graph $G_\phi$ and run the satisfiability algorithm on it. We
+  assume that the algorithm returned SAT and a possible solution $\delta$
+\item Calculate $E_2 = \{ (u, v) \mid sl(u, v) \leq 2 \}$ and the graph $G_2$
+  induced by $E_2$.
+\item Let $T_2$ be the set of tightening edges (initially set to $\emptyset$)
+  that we are interested in.
+\item For each vertex $v$
+  \begin{enumerate}
+  \item Find the path $P_v$ in $G_2$ from $v$ to $-v$ with the smallest slack (if
+    any). This can be achieved using breadth-first search or Dijkstra's
+    algorithm.
+  \item If $P_v$ exists
+    \begin{enumerate}
+    \item Let $wSP(v, -v) = \delta(-v) - \delta(v) + sl(P_v)$.
+    \item If $wSP(v, -v)$ is odd then add the edge $(v, -v)$ to $T_2$ and assign
+      it weight $w_{T_2}(v, -v) = wSP(v, -v) - 1$.
+    \end{enumerate}
+  \end{enumerate}
+\item Add all the edge in $T_2$ to the $G_\phi$ graph to get
+  $G_{\phi \cup T_2}$.
+\item Proceed as in the previous algorithm but with
+  $G_{\phi \cup T_2}$ instead of $G_{\phi \cup T}$.
+\end{enumerate}
+\end{table}
+However, this way of calculating the equalities requires us to compute all the
+tightening edges $T$ and then add them to the graph. As before an improved
+algorithm would avoid finding all those edges and use only the ones that can
+lead to a cycle of weight zero. The improved algorithm makes use of an
+intermediate lemma that is presented below \cite{bib:ms_utvpi}.
+
+\begin{lemma}
+Assuming $G_{\phi \cup T}$ has no negative cycles and if $C$ is a zero weight
+cycle in $G_{\phi \cup T}$ containing a tightening edge $(u, -u)$ then there is
+a cycle $C'$ in $G_\phi$ containing $u$ and $-u$ such that $w(C') \leq 2$.
+\end{lemma}
+
+This builds on another property that whenever there is a cycle $C$ in $G_{\phi \cup
+T}$ then there is cycle $C'$ with at most two tightening edges, such that $w(C')
+< 0$ or $w(C') < w(C)$. This gives us the ability to consider, without loss of
+generality, cycles with at most two tightening edges.
+
+Now the idea behind the finding only the tightening edges that are useful for
+equality generation is that if the cycle $C$ has at most two tightening edges
+then there is a cycle $C'$ without those edges and its weight is not greater
+than two (i.e. each of the tightening edges can decrease the weight by one only,
+so if we remove them the weight can get larger by at most two).
+The improved algorithm that taking advantage of this is presented in the Table
+\ref{tab:fast_eq}. It only really changes the first step of the previous one ---
+instead of calculating the whole $G_{\phi \cup T}$, it calculates only those
+tightening edges that are useful, adds them to the $G_\phi$ graph and then
+proceeds as before.

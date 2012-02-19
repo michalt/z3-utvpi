@@ -1,3 +1,9 @@
-Simple UTVPI (Unit Two Variable Per Inequality) theory solver for Z3. Based on
-the paper "An Efficient Decision Procedure for UTVPI Constraints" by Lahiri and
-Musuvathi.
+Simple UTVPI (Unit Two Variable Per Inequality) theory solver for Z3 along with
+report surveying DL (Difference Logic) and UTVPI in SMT solvers. The theory
+solver is mainly based on the paper "An Efficient Decision Procedure for UTVPI
+Constraints" by Lahiri and Musuvathi.
+
+The report and implementation has been done as the final project for the course
+"Advanced Analysis Techniques" at the Technical University of Denmark:
+http://www2.imm.dtu.dk/courses/02913/
+http://research.microsoft.com/en-us/events/z3dtu/
